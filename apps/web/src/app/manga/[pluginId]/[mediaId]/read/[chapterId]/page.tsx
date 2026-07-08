@@ -158,7 +158,7 @@ export default function MangaReaderPage({ params }: { params: Promise<Params> })
           </button>
           <div className="h-4 w-[1px] bg-slate-800" />
           <h1 className="text-sm md:text-base font-semibold truncate max-w-[200px] md:max-w-sm text-slate-200">
-            {chapterId}
+            {chapters.find((c) => c.id === chapterId)?.title || chapterId}
           </h1>
         </div>
 

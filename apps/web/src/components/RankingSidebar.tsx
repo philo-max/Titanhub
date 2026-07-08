@@ -1,46 +1,60 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { mockRanking } from '../lib/mockData';
 import { animateCounter } from '../lib/animations';
-import { API_BASE } from '@/lib/config';
+import { useHomeStore } from '../stores/homeStore';
 
 interface TrendingItem {
   id: string;
   title: string;
   category?: string;
   views?: string;
-  updateInfo?: string;
+  pluginId?: string;
+  mediaType?: string;
 }
+
+const CATEGORY_NAMES: Record<string, string> = {
+  anime: '动漫',
+  manga: '漫画',
+  novel: '小说',
+  movie: '电影',
+};
 
 export default function RankingSidebar() {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [items, setItems] = useState<TrendingItem[]>(mockRanking.slice(0, 5));
+  const storeItems = useHomeStore((state) => state.items);
+  const activeCategory = useHomeStore((state) => state.activeCategory);
+  const [items, setItems] = useState<TrendingItem[]>([]);
 
   useEffect(() => {
-    let active = true;
-    const fetchTrending = async () => {
-      try {
-        const res = await fetch(`${API_BASE}/api/plugins/bangumi/explore/anime`);
-        const data = await res.json();
-        if (active && data.items && Array.isArray(data.items) && data.items.length > 0) {
-          const mapped = data.items.slice(0, 5).map((item: any) => ({
-            id: item.id,
-            title: item.title,
-            category: '动漫',
-            views: item.updateInfo || '今日热门',
-          }));
-          setItems(mapped);
-        }
-      } catch {
-        // Fallback to mock rankings
-      }
-    };
-    fetchTrending();
-    return () => {
-      active = false;
-    };
-  }, []);
+    // If the home store has real aggregated items, display them as trending
+    if (storeItems && storeItems.length > 0) {
+      const mapped = storeItems.slice(0, 5).map((item) => ({
+        id: item.id,
+        title: item.title,
+        category: CATEGORY_NAMES[item.mediaType] || item.mediaType,
+        views: item.updateInfo || '热门推荐',
+        pluginId: item.pluginId,
+        mediaType: item.mediaType,
+      }));
+      setItems(mapped);
+    } else {
+      // Fallback to category-matching mock rankings
+      const matchedMocks = mockRanking
+        .filter((r) => r.category.toLowerCase() === activeCategory.toLowerCase())
+        .map((r) => ({
+          id: r.id,
+          title: r.title,
+          category: r.category,
+          views: r.views,
+        }));
+      
+      // If no matched category mocks, show general mock rankings
+      setItems(matchedMocks.length > 0 ? matchedMocks : mockRanking.slice(0, 5));
+    }
+  }, [storeItems, activeCategory]);
 
   useEffect(() => {
     if (items.length > 0) {
@@ -63,27 +77,41 @@ export default function RankingSidebar() {
         Trending
       </h2>
       <div className="flex flex-col gap-4">
-        {items.map((item, index) => (
-          <div
-            key={item.id}
-            className="flex items-center gap-4 p-3 rounded-xl hover:bg-white/5 transition-colors cursor-pointer group"
-          >
-            <div className="w-10 h-10 flex items-center justify-center rounded-full bg-surface group-hover:bg-primary/20 transition-colors border border-border group-hover:border-primary/30">
-              <span className="ranking-number text-xl font-black text-textSecondary group-hover:text-primary transition-colors">
-                {index + 1}
-              </span>
-            </div>
-            <div className="flex flex-col flex-1 min-w-0">
-              <h4 className="text-white font-semibold truncate">{item.title}</h4>
-              <div className="flex items-center gap-2 text-xs text-textSecondary mt-1">
-                <span className="bg-surfaceLight px-2 py-0.5 rounded text-textPrimary font-medium">
-                  {item.category}
+        {items.map((item, index) => {
+          const content = (
+            <div className="flex items-center gap-4 p-3 rounded-xl hover:bg-white/5 transition-colors cursor-pointer group w-full text-left">
+              <div className="w-10 h-10 flex items-center justify-center rounded-full bg-surface group-hover:bg-primary/20 transition-colors border border-border group-hover:border-primary/30 flex-shrink-0">
+                <span className="ranking-number text-xl font-black text-textSecondary group-hover:text-primary transition-colors">
+                  {index + 1}
                 </span>
-                <span>{item.views}</span>
+              </div>
+              <div className="flex flex-col flex-1 min-w-0">
+                <h4 className="text-white font-semibold truncate group-hover:text-primary transition-colors">{item.title}</h4>
+                <div className="flex items-center gap-2 text-xs text-textSecondary mt-1">
+                  <span className="bg-surfaceLight px-2 py-0.5 rounded text-textPrimary font-medium">
+                    {item.category}
+                  </span>
+                  <span>{item.views}</span>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+
+          if (item.pluginId && item.mediaType) {
+            const href = `/${item.mediaType}/${item.pluginId}/${item.id}`;
+            return (
+              <Link key={`${item.mediaType}-${item.pluginId}-${item.id}`} href={href} className="w-full block">
+                {content}
+              </Link>
+            );
+          }
+
+          return (
+            <div key={item.id} className="w-full">
+              {content}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

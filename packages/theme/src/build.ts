@@ -61,6 +61,13 @@ dartContent += `}\n`;
 
 fs.writeFileSync(path.join(distDir, 'app_theme.dart'), dartContent);
 
+// Copy to Flutter mobile app if it exists
+const mobileThemeDir = path.join(__dirname, '../../../apps/mobile/lib/core/theme');
+if (fs.existsSync(mobileThemeDir)) {
+  fs.writeFileSync(path.join(mobileThemeDir, 'app_theme.dart'), dartContent);
+  console.log('✅ Synchronized app_theme.dart to apps/mobile/');
+}
+
 // Also create an index.js to export the tailwind preset
 fs.writeFileSync(
   path.join(distDir, 'index.js'),

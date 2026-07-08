@@ -44,7 +44,7 @@ Titanhub/
 
 ### 1. Database Setup
 
-Spin up the local PostgreSQL, Redis, and MinIO instances:
+Spin up the local PostgreSQL instance (Redis and MinIO are reserved for future storage/caching extensions and commented out by default to minimize local resource footprint):
 
 ```bash
 docker compose up -d

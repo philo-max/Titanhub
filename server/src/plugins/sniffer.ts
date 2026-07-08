@@ -14,6 +14,30 @@ export class PlaywrightSniffer {
     return this.browser;
   }
 
+  private static isVideoUrl(urlStr: string): boolean {
+    try {
+      const parsed = new URL(urlStr);
+      const pathname = parsed.pathname.toLowerCase();
+      
+      // Filter out TS chunks or segments: .ts extensions or /segment /ts/ patterns
+      const isTsSegment = pathname.endsWith('.ts') || 
+                          /\.ts(?:[?#]|$)/i.test(urlStr) || 
+                          /\/segment\b/i.test(pathname) || 
+                          /\/ts\//i.test(pathname) ||
+                          /\bchunk\b/i.test(pathname);
+      
+      if (isTsSegment) return false;
+
+      // Match legitimate manifest or file extensions (m3u8, mp4, flv, mkv, webm)
+      const hasVideoExtension = /\.(m3u8|mp4|flv|mkv|webm)(?:[?#]|$)/i.test(urlStr) ||
+                                (pathname.includes('/play') && urlStr.includes('m3u8'));
+      
+      return hasVideoExtension;
+    } catch {
+      return false;
+    }
+  }
+
   /**
    * Sniff video stream URL by navigating to page and listening to requests/responses.
    */
@@ -60,16 +84,8 @@ export class PlaywrightSniffer {
       // Listen to requests
       page.on('request', (request: Request) => {
         const reqUrl = request.url();
-        if (
-          reqUrl.includes('.m3u8') ||
-          reqUrl.includes('.mp4') ||
-          reqUrl.includes('.flv') ||
-          (reqUrl.includes('/play') && reqUrl.includes('m3u8'))
-        ) {
-          // Exclude segments/chunks to avoid picking up TS files
-          if (!reqUrl.includes('.ts') && !reqUrl.includes('/segment')) {
-            resolvedUrl = reqUrl;
-          }
+        if (this.isVideoUrl(reqUrl)) {
+          resolvedUrl = reqUrl;
         }
       });
 
@@ -82,7 +98,12 @@ export class PlaywrightSniffer {
           contentType.includes('application/vnd.apple.mpegurl') ||
           contentType.startsWith('video/')
         ) {
-          if (!resUrl.includes('.ts') && !resUrl.includes('/segment')) {
+          // Additional safety check to avoid picking up TS segment files
+          const isTs = resUrl.toLowerCase().endsWith('.ts') || 
+                       /\.ts(?:[?#]|$)/i.test(resUrl) || 
+                       /\/segment\b/i.test(resUrl) || 
+                       /\bchunk\b/i.test(resUrl);
+          if (!isTs) {
             resolvedUrl = resUrl;
           }
         }
