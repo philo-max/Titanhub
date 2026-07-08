@@ -1,0 +1,7 @@
+@import 'tailwindcss';
+@config "../../tailwind.config.ts";
+
+/* Custom utility styles or variables if needed */
+:root {
+  --font-sans: 'Inter', system-ui, sans-serif;
+}

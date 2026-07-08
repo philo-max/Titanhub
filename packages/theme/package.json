@@ -1,0 +1,17 @@
+{
+  "name": "@titanhub/theme",
+  "version": "1.0.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "ts-node src/build.ts && tsc",
+    "dev": "ts-node src/build.ts --watch",
+    "lint": "eslint ."
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "ts-node": "^10.9.2",
+    "@types/node": "^20.0.0"
+  }
+}

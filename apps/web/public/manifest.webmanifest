@@ -1,0 +1,27 @@
+{
+  "name": "Titanhub - ACG 全内容聚合平台",
+  "short_name": "Titanhub",
+  "description": "一个应用，看遍所有 ACG 内容（动漫 / 漫画 / 轻小说 / 影视）",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#0a0a0a",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

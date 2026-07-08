@@ -1,0 +1,38 @@
+{
+  "name": "titanhub-server",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "dev:bun": "bun --watch src/index.ts",
+    "start:bun": "bun src/index.ts",
+    "build": "tsc",
+    "test": "vitest run",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.13.7",
+    "@titanhub/plugin-types": "workspace:*",
+    "@xmldom/xmldom": "^0.9.10",
+    "bcryptjs": "^3.0.3",
+    "cheerio": "^1.2.0",
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.0.0",
+    "pg": "^8.22.0",
+    "playwright": "^1.61.1",
+    "quickjs-emscripten": "^0.32.0",
+    "xpath": "^0.0.34"
+  },
+  "devDependencies": {
+    "@titanhub/plugin-adapter": "workspace:*",
+    "@types/bcryptjs": "^3.0.0",
+    "@types/node": "^20.0.0",
+    "@types/pg": "^8.20.0",
+    "bun-types": "latest",
+    "drizzle-kit": "^0.31.10",
+    "tsx": "^4.19.3",
+    "typescript": "^5.0.0",
+    "vitest": "^4.1.10"
+  }
+}
