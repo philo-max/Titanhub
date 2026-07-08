@@ -89,6 +89,12 @@ interface DnsCacheEntry {
 const dnsCache = new Map<string, DnsCacheEntry>();
 const DNS_CACHE_TTL_MS = 30000; // 30 seconds
 
+// Domain-specific rate limiting registry
+const domainLastRequestTime = new Map<string, number>();
+const DOMAIN_MIN_INTERVAL: Record<string, number> = {
+  'api.mangadex.org': 250, // Max 4 requests per second to stay safely under 5 req/s limit
+};
+
 export async function isSafeUrl(urlString: string): Promise<boolean> {
   try {
     const parsed = new URL(urlString);
@@ -466,6 +472,24 @@ export class PluginSandbox {
                 deferred.reject(errStr);
                 return;
               }
+
+              // Apply domain-specific rate limiting
+              try {
+                const parsedUrl = new URL(url);
+                const hostname = parsedUrl.hostname.toLowerCase();
+                const minInterval = DOMAIN_MIN_INTERVAL[hostname] || 0;
+                if (minInterval > 0) {
+                  const lastTime = domainLastRequestTime.get(hostname) || 0;
+                  const now = Date.now();
+                  const targetTime = Math.max(now, lastTime + minInterval);
+                  domainLastRequestTime.set(hostname, targetTime);
+                  const delay = targetTime - now;
+                  if (delay > 0) {
+                    await new Promise((resolve) => setTimeout(resolve, delay));
+                  }
+                }
+              } catch {}
+
               const res = await fetch(url, options);
               const text = await res.text();
 

@@ -134,6 +134,12 @@ async function seedMockPlugin() {
       file: 'mock-movie.js',
     },
     { id: 'bangumi', name: 'Bangumi 番组计划', types: ['anime'] as const, file: 'bangumi.js' },
+    {
+      id: 'mangadex',
+      name: 'MangaDex 漫画',
+      types: ['manga'] as const,
+      file: 'mangadex.js',
+    },
   ];
 
   try {
