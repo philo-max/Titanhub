@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef } from 'react';
 import Link from 'next/link';
+import { Loader2 } from 'lucide-react';
 import { AggregatedMediaItem } from '@titanhub/plugin-types';
 import MediaCard from './MediaCard';
 import { useHomeStore } from '../stores/homeStore';
@@ -16,8 +17,11 @@ export default function ContentGrid() {
   const activeCategory = useHomeStore((state) => state.activeCategory);
   const items = useHomeStore((state) => state.items);
   const loading = useHomeStore((state) => state.loading);
+  const loadingMore = useHomeStore((state) => state.loadingMore);
   const error = useHomeStore((state) => state.error);
+  const hasMore = useHomeStore((state) => state.hasMore);
   const fetchCategory = useHomeStore((state) => state.fetchCategory);
+  const loadMore = useHomeStore((state) => state.loadMore);
   const loadMockFallback = useHomeStore((state) => state.loadMockFallback);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -83,16 +87,37 @@ export default function ContentGrid() {
   }
 
   return (
-    <div ref={containerRef} className="w-full grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-6">
-      {items.map((item) => {
-        const href = detailHref(item);
-        const card = <MediaCard item={item} originBadge={item.pluginName} />;
-        return (
-          <div key={`${activeCategory}-${item.pluginId}-${item.id}`} className="media-card-wrapper">
-            {href ? <Link href={href}>{card}</Link> : card}
-          </div>
-        );
-      })}
+    <div className="w-full flex flex-col gap-8">
+      <div ref={containerRef} className="w-full grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-6">
+        {items.map((item) => {
+          const href = detailHref(item);
+          const card = <MediaCard item={item} originBadge={item.pluginName} />;
+          return (
+            <div key={`${activeCategory}-${item.pluginId}-${item.id}`} className="media-card-wrapper">
+              {href ? <Link href={href}>{card}</Link> : card}
+            </div>
+          );
+        })}
+      </div>
+
+      {hasMore && (
+        <div className="flex justify-center">
+          <button
+            onClick={() => loadMore()}
+            disabled={loadingMore}
+            className="flex items-center gap-2 px-8 py-3 bg-surface border border-border hover:border-primary/40 hover:bg-surfaceLight text-textPrimary font-semibold rounded-2xl text-sm transition-all active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
+          >
+            {loadingMore ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                加载中...
+              </>
+            ) : (
+              '加载更多'
+            )}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
