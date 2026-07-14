@@ -4,12 +4,15 @@ import { serve } from '@hono/node-server';
 import fs from 'fs/promises';
 import path from 'path';
 
+import { adaptKazumi } from '@titanhub/plugin-adapter';
+
 import { getPlugins, savePlugin, deletePlugin, getPlugin, setPluginActive } from './db/db';
 import { PluginManager } from './plugins/manager';
 import { requireAuth } from './auth/jwt';
 import auth from './routes/auth';
 import sync from './routes/sync';
 import danmakuRoutes from './routes/danmaku';
+import danmakuEnhanced from './routes/danmaku-enhanced';
 import aggregate from './routes/aggregate';
 import { PlaywrightSniffer } from './plugins/sniffer';
 
@@ -22,6 +25,7 @@ app.use('*', cors());
 app.route('/api/auth', auth);
 app.route('/api/sync', sync);
 app.route('/api/danmaku', danmakuRoutes);
+app.route('/api/danmaku', danmakuEnhanced);
 app.route('/api/aggregate', aggregate);
 
 // Seed Mock site HTML data for plugin scraping tests
@@ -158,6 +162,28 @@ async function seedMockPlugin() {
     }
   } catch (err) {
     console.error('Failed to seed mock plugin database:', err);
+  }
+
+  // Seed real anime sources ported from the Kazumi rule repository (references/Kazumi)
+  const rulesDir = path.join(process.cwd(), 'src/plugins/rules');
+  try {
+    const ruleFiles = (await fs.readdir(rulesDir)).filter((f) => f.endsWith('.json'));
+    for (const file of ruleFiles) {
+      try {
+        const rule = JSON.parse(await fs.readFile(path.join(rulesDir, file), 'utf-8'));
+        const adapted = adaptKazumi(rule);
+        await savePlugin({
+          ...adapted,
+          isActive: true,
+          isBuiltin: true,
+        });
+        console.log(`Seeded Kazumi rule plugin ${adapted.name} (${adapted.id}).`);
+      } catch (err) {
+        console.error(`Failed to seed Kazumi rule ${file}:`, err);
+      }
+    }
+  } catch (err) {
+    console.error('Failed to read Kazumi rules directory:', err);
   }
 }
 seedMockPlugin();
@@ -347,3 +373,4 @@ export default {
   port,
   fetch: app.fetch,
 };
+

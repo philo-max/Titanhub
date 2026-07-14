@@ -8,6 +8,18 @@ export interface SandboxResult<T> {
   error?: string;
 }
 
+// xmldom serializes empty elements as self-closing (<div/>), but fragments we
+// hand back get re-parsed with HTML semantics where <div/> is an OPEN tag that
+// swallows all following siblings, corrupting positional XPath on sub-selects.
+// Expand them to <tag></tag>; stray close tags on void elements are ignored by
+// the HTML parser, so expanding unconditionally is safe.
+function expandSelfClosingTags(xml: string): string {
+  return xml.replace(
+    /<([a-zA-Z][\w:-]*)((?:"[^"]*"|'[^']*'|[^'">])*)\/>/g,
+    '<$1$2></$1>'
+  );
+}
+
 function executeXPath(html: string, expression: string): any[] {
   try {
     const cheerio = require('cheerio');
@@ -65,7 +77,7 @@ function executeXPath(html: string, expression: string): any[] {
         }
         return {
           text: node.textContent?.trim() || '',
-          html: node.toString() || '',
+          html: expandSelfClosingTags(node.toString() || ''),
           attrs,
         };
       }

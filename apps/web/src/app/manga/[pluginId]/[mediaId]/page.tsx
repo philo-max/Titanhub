@@ -9,7 +9,8 @@ import {
   animateDetailPageExitPlay,
 } from '@/lib/animations';
 import { ArrowLeft, BookOpen, Calendar, User, Compass, HelpCircle, Loader2 } from 'lucide-react';
-import { API_BASE } from '@/lib/config';
+import { API_BASE, recordMediaView } from '@/lib/config';
+import { playbackCache } from '@/lib/playbackCache';
 
 interface Params {
   pluginId: string;
@@ -37,6 +38,8 @@ export default function MangaDetailPage({ params }: { params: Promise<Params> })
   const { pluginId, mediaId } = use(params);
   const router = useRouter();
   const pageRef = useRef<HTMLDivElement>(null);
+  const viewRecordedRef = useRef<string | null>(null);
+  const prefetchTimersRef = useRef<Record<string, NodeJS.Timeout>>({});
   const [detail, setDetail] = useState<MediaDetail | null>(null);
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [loading, setLoading] = useState(true);
@@ -55,6 +58,16 @@ export default function MangaDetailPage({ params }: { params: Promise<Params> })
           throw new Error(detailData.error);
         }
         setDetail(detailData.detail);
+        if (viewRecordedRef.current !== mediaId) {
+          viewRecordedRef.current = mediaId;
+          recordMediaView({
+            mediaType: 'manga',
+            mediaId,
+            pluginId,
+            title: detailData.detail.title,
+            cover: detailData.detail.cover,
+          });
+        }
 
         // Fetch chapters list
         const chaptersRes = await fetch(`${API_BASE}/api/plugins/${pluginId}/chapters/${mediaId}`);
@@ -76,10 +89,13 @@ export default function MangaDetailPage({ params }: { params: Promise<Params> })
 
   // GSAP Entrance Animations
   useEffect(() => {
+    const timers = prefetchTimersRef.current;
     if (!loading && detail) {
       const ctx = animateDetailPageEntrance(pageRef.current);
       return () => {
         if (ctx) ctx.revert();
+        // Clear all pending prefetch timers on unmount
+        Object.values(timers).forEach(clearTimeout);
       };
     }
   }, [loading, detail]);
@@ -93,9 +109,27 @@ export default function MangaDetailPage({ params }: { params: Promise<Params> })
 
   const handleChapterClick = (e: React.MouseEvent, chapterId: string) => {
     e.preventDefault();
+    if (prefetchTimersRef.current[chapterId]) {
+      clearTimeout(prefetchTimersRef.current[chapterId]);
+    }
     animateDetailPageExitPlay(pageRef.current, () => {
       router.push(`/manga/${pluginId}/${mediaId}/read/${chapterId}`);
     });
+  };
+
+  const handleChapterMouseEnter = (chapterId: string) => {
+    if (prefetchTimersRef.current[chapterId]) return;
+    prefetchTimersRef.current[chapterId] = setTimeout(() => {
+      playbackCache.prefetch(pluginId, mediaId, chapterId, 'manga');
+      delete prefetchTimersRef.current[chapterId];
+    }, 150);
+  };
+
+  const handleChapterMouseLeave = (chapterId: string) => {
+    if (prefetchTimersRef.current[chapterId]) {
+      clearTimeout(prefetchTimersRef.current[chapterId]);
+      delete prefetchTimersRef.current[chapterId];
+    }
   };
 
   if (loading) {
@@ -236,6 +270,8 @@ export default function MangaDetailPage({ params }: { params: Promise<Params> })
                   key={chapter.id}
                   href={`/manga/${pluginId}/${mediaId}/read/${chapter.id}`}
                   onClick={(e) => handleChapterClick(e, chapter.id)}
+                  onMouseEnter={() => handleChapterMouseEnter(chapter.id)}
+                  onMouseLeave={() => handleChapterMouseLeave(chapter.id)}
                   className="animate-chapter-btn flex items-center justify-between bg-background/60 border border-surface hover:border-border/80 rounded-xl px-4 py-3.5 hover:bg-surface/30 active:scale-97 transition-all text-left text-sm group cursor-pointer"
                 >
                   <div className="flex items-center gap-2.5 min-w-0">

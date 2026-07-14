@@ -81,8 +81,14 @@ export async function savePlugin(
   let savedRow: typeof schema.plugins.$inferSelect;
 
   if (existing) {
-    // If it's a builtin plugin and version is NOT greater, skip seeding to avoid wiping user customizations on startup.
-    if (plugin.isBuiltin && existing.isBuiltin && plugin.version === existing.version) {
+    // Builtin reseed with identical version AND code is a no-op; when code changed
+    // (e.g. adapter regenerated), always push it so local changes reach the database.
+    if (
+      plugin.isBuiltin &&
+      existing.isBuiltin &&
+      plugin.version === existing.version &&
+      plugin.code === existing.code
+    ) {
       return existing;
     }
 
@@ -94,7 +100,8 @@ export async function savePlugin(
         types: typesString,
         author: plugin.author,
         code: plugin.code,
-        isActive: plugin.isActive,
+        // Builtin reseeds must not override the user's enable/disable choice
+        isActive: plugin.isBuiltin && existing.isBuiltin ? existing.isActive : plugin.isActive,
         isBuiltin: plugin.isBuiltin,
         installCount: plugin.installCount,
       })

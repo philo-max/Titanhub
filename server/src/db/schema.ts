@@ -10,6 +10,7 @@ import {
   bigint,
   real,
   boolean,
+  unique,
 } from 'drizzle-orm/pg-core';
 
 export const mediaTypeEnum = pgEnum('media_type', ['anime', 'manga', 'novel', 'movie']);
@@ -92,6 +93,26 @@ export const danmaku = pgTable('danmaku', {
   userHash: varchar('user_hash', { length: 32 }), // anonymous user identifier hash
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
+
+// Media View Counts Table (drives real trending rankings)
+export const mediaViews = pgTable(
+  'media_views',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    mediaType: mediaTypeEnum('media_type').notNull(),
+    mediaId: varchar('media_id', { length: 255 }).notNull(),
+    pluginId: varchar('plugin_id', { length: 255 }).notNull(),
+    title: varchar('title', { length: 512 }).notNull(),
+    cover: text('cover'),
+    views: integer('views').default(0).notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  (table) => {
+    return [
+      unique('plugin_media_views_unique').on(table.pluginId, table.mediaId, table.mediaType),
+    ];
+  }
+);
 
 // Plugins Table
 export const plugins = pgTable('plugins', {

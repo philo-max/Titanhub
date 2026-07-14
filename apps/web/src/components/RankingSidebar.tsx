@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { mockRanking } from '../lib/mockData';
 import { animateCounter } from '../lib/animations';
 import { useHomeStore } from '../stores/homeStore';
+import { API_BASE } from '../lib/config';
 
 interface TrendingItem {
   id: string;
@@ -19,29 +20,53 @@ const CATEGORY_NAMES: Record<string, string> = {
   anime: '动漫',
   manga: '漫画',
   novel: '小说',
-  movie: '电影',
+  movie: '影视',
 };
+
+interface MediaViewRow {
+  mediaId: string;
+  title: string;
+  pluginId: string;
+  mediaType: string;
+  views: number;
+}
 
 export default function RankingSidebar() {
   const containerRef = useRef<HTMLDivElement>(null);
-  const storeItems = useHomeStore((state) => state.items);
   const activeCategory = useHomeStore((state) => state.activeCategory);
   const [items, setItems] = useState<TrendingItem[]>([]);
 
   useEffect(() => {
-    // If the home store has real aggregated items, display them as trending
-    if (storeItems && storeItems.length > 0) {
-      const mapped = storeItems.slice(0, 5).map((item) => ({
-        id: item.id,
-        title: item.title,
-        category: CATEGORY_NAMES[item.mediaType] || item.mediaType,
-        views: item.updateInfo || '热门推荐',
-        pluginId: item.pluginId,
-        mediaType: item.mediaType,
-      }));
-      setItems(mapped);
-    } else {
-      // Fallback to category-matching mock rankings
+    let cancelled = false;
+
+    const fetchRanking = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/aggregate/ranking?type=${activeCategory}&limit=5`);
+        if (!res.ok) throw new Error(`Server returned HTTP ${res.status}`);
+        const data = await res.json();
+        const rows: MediaViewRow[] = Array.isArray(data.items) ? data.items : [];
+
+        if (cancelled) return;
+
+        if (rows.length > 0) {
+          setItems(
+            rows.map((row) => ({
+              id: row.mediaId,
+              title: row.title,
+              category: CATEGORY_NAMES[row.mediaType] || row.mediaType,
+              views: `${row.views} 次浏览`,
+              pluginId: row.pluginId,
+              mediaType: row.mediaType,
+            }))
+          );
+          return;
+        }
+      } catch (err) {
+        if (cancelled) return;
+        console.warn('[RankingSidebar] Failed to load real ranking data:', err);
+      }
+
+      if (cancelled) return;
       const matchedMocks = mockRanking
         .filter((r) => r.category.toLowerCase() === activeCategory.toLowerCase())
         .map((r) => ({
@@ -50,11 +75,14 @@ export default function RankingSidebar() {
           category: r.category,
           views: r.views,
         }));
-      
-      // If no matched category mocks, show general mock rankings
       setItems(matchedMocks.length > 0 ? matchedMocks : mockRanking.slice(0, 5));
-    }
-  }, [storeItems, activeCategory]);
+    };
+
+    fetchRanking();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeCategory]);
 
   useEffect(() => {
     if (items.length > 0) {

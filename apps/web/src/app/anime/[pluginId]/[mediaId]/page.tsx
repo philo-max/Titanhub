@@ -9,7 +9,8 @@ import {
   animateDetailPageExitPlay,
 } from '@/lib/animations';
 import { ArrowLeft, Play, Calendar, User, Compass, HelpCircle, Loader2 } from 'lucide-react';
-import { API_BASE } from '@/lib/config';
+import { API_BASE, recordMediaView } from '@/lib/config';
+import { playbackCache } from '@/lib/playbackCache';
 
 interface Params {
   pluginId: string;
@@ -37,6 +38,8 @@ export default function AnimeDetailPage({ params }: { params: Promise<Params> })
   const { pluginId, mediaId } = use(params);
   const router = useRouter();
   const pageRef = useRef<HTMLDivElement>(null);
+  const viewRecordedRef = useRef<string | null>(null);
+  const prefetchTimersRef = useRef<Record<string, NodeJS.Timeout>>({});
   const [detail, setDetail] = useState<MediaDetail | null>(null);
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [loading, setLoading] = useState(true);
@@ -55,6 +58,16 @@ export default function AnimeDetailPage({ params }: { params: Promise<Params> })
           throw new Error(detailData.error);
         }
         setDetail(detailData.detail);
+        if (viewRecordedRef.current !== mediaId) {
+          viewRecordedRef.current = mediaId;
+          recordMediaView({
+            mediaType: 'anime',
+            mediaId,
+            pluginId,
+            title: detailData.detail.title,
+            cover: detailData.detail.cover,
+          });
+        }
 
         // Fetch chapters list
         const chaptersRes = await fetch(`${API_BASE}/api/plugins/${pluginId}/chapters/${mediaId}`);
@@ -76,10 +89,13 @@ export default function AnimeDetailPage({ params }: { params: Promise<Params> })
 
   // GSAP Entrance Animations
   useEffect(() => {
+    const timers = prefetchTimersRef.current;
     if (!loading && detail) {
       const ctx = animateDetailPageEntrance(pageRef.current);
       return () => {
         if (ctx) ctx.revert();
+        // Clear all pending prefetch timers on unmount
+        Object.values(timers).forEach(clearTimeout);
       };
     }
   }, [loading, detail]);
@@ -92,9 +108,27 @@ export default function AnimeDetailPage({ params }: { params: Promise<Params> })
   };
 
   const handleChapterClick = (chapterId: string) => {
+    if (prefetchTimersRef.current[chapterId]) {
+      clearTimeout(prefetchTimersRef.current[chapterId]);
+    }
     animateDetailPageExitPlay(pageRef.current, () => {
       router.push(`/anime/${pluginId}/${mediaId}/play/${chapterId}`);
     });
+  };
+
+  const handleChapterMouseEnter = (chapterId: string) => {
+    if (prefetchTimersRef.current[chapterId]) return;
+    prefetchTimersRef.current[chapterId] = setTimeout(() => {
+      playbackCache.prefetch(pluginId, mediaId, chapterId, 'anime');
+      delete prefetchTimersRef.current[chapterId];
+    }, 150);
+  };
+
+  const handleChapterMouseLeave = (chapterId: string) => {
+    if (prefetchTimersRef.current[chapterId]) {
+      clearTimeout(prefetchTimersRef.current[chapterId]);
+      delete prefetchTimersRef.current[chapterId];
+    }
   };
 
   if (loading) {
@@ -231,6 +265,8 @@ export default function AnimeDetailPage({ params }: { params: Promise<Params> })
                 <button
                   key={ch.id}
                   onClick={() => handleChapterClick(ch.id)}
+                  onMouseEnter={() => handleChapterMouseEnter(ch.id)}
+                  onMouseLeave={() => handleChapterMouseLeave(ch.id)}
                   className="animate-chapter-btn group relative overflow-hidden text-left bg-slate-900 hover:bg-violet-950/20 border border-slate-800/80 hover:border-violet-500/40 rounded-xl p-4 cursor-pointer transition-all duration-300 active:scale-95"
                 >
                   <div className="flex justify-between items-start">

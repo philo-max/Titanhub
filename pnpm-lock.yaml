@@ -124,6 +124,9 @@ importers:
       '@hono/node-server':
         specifier: ^1.13.7
         version: 1.19.14(hono@4.12.27)
+      '@titanhub/plugin-adapter':
+        specifier: workspace:*
+        version: link:../packages/plugin-adapter
       '@titanhub/plugin-types':
         specifier: workspace:*
         version: link:../packages/plugin-types
@@ -155,9 +158,6 @@ importers:
         specifier: ^0.0.34
         version: 0.0.34
     devDependencies:
-      '@titanhub/plugin-adapter':
-        specifier: workspace:*
-        version: link:../packages/plugin-adapter
       '@types/bcryptjs':
         specifier: ^3.0.0
         version: 3.0.0

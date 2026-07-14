@@ -161,7 +161,7 @@ export default function NovelReaderPage({ params }: { params: Promise<Params> })
   const activeTheme = themeClasses[theme];
 
   // Helper: split text by double newline to render separate paragraph DOM nodes
-  const paragraphs = content.split('\n\n').filter((p) => p.trim().isNotEmpty);
+  const paragraphs = content.split('\n\n').filter((p) => p.trim() !== '');
 
   if (loading) {
     return (
@@ -370,14 +370,4 @@ export default function NovelReaderPage({ params }: { params: Promise<Params> })
   );
 }
 
-// Extension implementation for Dart non-empty checking in typescript
-declare global {
-  interface String {
-    isNotEmpty: boolean;
-  }
-}
-Object.defineProperty(String.prototype, 'isNotEmpty', {
-  get: function () {
-    return this.length > 0;
-  },
-});
+

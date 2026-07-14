@@ -37,3 +37,4 @@ references/
 
 # Local database caches / backups
 db.json
+.claude/

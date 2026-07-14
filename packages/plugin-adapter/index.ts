@@ -4,7 +4,9 @@ export interface KazumiRule {
   name: string;
   version?: string;
   type?: Extract<MediaType, 'anime' | 'movie'>;
-  baseUrl: string;
+  /** Kazumi 原生规则字段为 baseURL，早期 Titanhub 导入格式为 baseUrl，两者皆可 */
+  baseUrl?: string;
+  baseURL?: string;
   searchURL: string;
   searchList: string;
   searchName: string;
@@ -45,18 +47,21 @@ function assertField(rule: Record<string, unknown>, field: string): void {
  * Selectors starting with "/" or "//" run as XPath 1.0 on the host bridge;
  * anything else runs as a CSS selector. XPath list/sub-selector pairs are
  * evaluated scoped: sub-selectors query each list item's own HTML fragment.
- * Rules relying on WebView playback sniffing (useWebview=true) cannot be converted.
+ * Rules with useWebview=true resolve playback via the host sniffVideo bridge.
  */
 export function adaptKazumi(rule: KazumiRule): AdaptedPlugin {
   for (const field of [
     'name',
-    'baseUrl',
     'searchURL',
     'searchList',
     'searchName',
     'searchResult',
   ]) {
     assertField(rule as unknown as Record<string, unknown>, field);
+  }
+  const baseUrl = rule.baseUrl || rule.baseURL;
+  if (!baseUrl || typeof baseUrl !== 'string') {
+    throw new Error('Kazumi 规则缺少必需字段: baseUrl/baseURL');
   }
 
   const type = rule.type === 'movie' ? 'movie' : 'anime';
@@ -65,7 +70,7 @@ export function adaptKazumi(rule: KazumiRule): AdaptedPlugin {
   const code = `// Auto-generated from Kazumi rule "${rule.name}" by @titanhub/plugin-adapter
 const RULE = ${JSON.stringify(
     {
-      baseUrl: rule.baseUrl,
+      baseUrl,
       searchURL: rule.searchURL,
       searchList: rule.searchList,
       searchName: rule.searchName,
@@ -83,7 +88,8 @@ const RULE = ${JSON.stringify(
 
 const HEADERS = {};
 if (RULE.userAgent) HEADERS['User-Agent'] = RULE.userAgent;
-if (RULE.referer) HEADERS['Referer'] = RULE.referer;
+// Kazumi always sends the site itself as referer; some sites reject bare requests
+HEADERS['Referer'] = RULE.referer || RULE.baseUrl;
 
 function absolutize(url) {
   if (!url) return '';
@@ -116,11 +122,15 @@ const plugin = {
     const links = query(html, RULE.searchList, RULE.searchResult);
     const covers = RULE.searchCover ? query(html, RULE.searchList, RULE.searchCover) : [];
 
-    return names.map((n, i) => ({
-      id: encodeURIComponent((links[i] && links[i].attrs && links[i].attrs.href) || String(i)),
-      title: n.text || '未命名',
-      cover: absolutize(covers[i] && covers[i].attrs && (covers[i].attrs.src || covers[i].attrs['data-src'])),
-    }));
+    // Mirror Kazumi: skip list entries whose name/link sub-selector missed
+    return names
+      .map((n, i) => ({
+        href: (links[i] && links[i].attrs && links[i].attrs.href) || '',
+        title: (n.text || '').replace(/\\s+/g, ' ').trim(),
+        cover: absolutize(covers[i] && covers[i].attrs && (covers[i].attrs.src || covers[i].attrs['data-src'])),
+      }))
+      .filter(r => r.href && r.title)
+      .map(r => ({ id: encodeURIComponent(r.href), title: r.title, cover: r.cover }));
   },
 
   async getDetail(mediaId) {
@@ -143,19 +153,22 @@ const plugin = {
     let list = [];
     if (isXPath) {
       const roads = JSON.parse(htmlParser.select(html, RULE.chapterRoads) || '[]');
-      roads.forEach(road => {
+      roads.forEach((road, roadIndex) => {
         const sub = JSON.parse(htmlParser.select(road.html, RULE.chapterResult) || '[]');
-        list.push(...sub);
+        const prefix = roads.length > 1 ? ('线路' + (roadIndex + 1) + '·') : '';
+        sub.forEach(item => list.push({ ...item, text: prefix + (item.text || '') }));
       });
     } else {
       list = JSON.parse(htmlParser.select(html, RULE.chapterRoads + ' ' + RULE.chapterResult) || '[]');
     }
 
-    return list.map((item, i) => ({
-      id: encodeURIComponent((item.attrs && item.attrs.href) || String(i)),
-      title: item.text || ('第 ' + (i + 1) + ' 话'),
-      chapterNo: i + 1,
-    }));
+    return list
+      .filter(item => item.attrs && item.attrs.href)
+      .map((item, i) => ({
+        id: encodeURIComponent(item.attrs.href),
+        title: (item.text || '').replace(/\\s+/g, ' ').trim() || ('第 ' + (i + 1) + ' 话'),
+        chapterNo: i + 1,
+      }));
   },
 
   async getVideoUrl(chapterId) {

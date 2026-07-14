@@ -78,6 +78,10 @@ const plugin = {
       chapterNo: ep.sort || ep.ep || 0,
     }));
   },
+
+  async getVideoUrl() {
+    throw new Error('Bangumi 番组计划是资讯源，不提供视频播放，请改用动漫资源插件（如 咕咕番/风车动漫）搜索后观看。');
+  },
 };
 
 globalThis.plugin = plugin;

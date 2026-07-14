@@ -8,12 +8,13 @@ import {
   animatePlayPageExitNext,
   animatePlayPageExitBack,
 } from '@/lib/animations';
-import { ArrowLeft, Play, RefreshCw, Loader2, Compass } from 'lucide-react';
+import { ArrowLeft, Play, Loader2, Compass } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { DanmakuComment } from '@/components/DanmakuLayer';
 import { useSyncStore } from '@/stores/syncStore';
 import { useAuthStore } from '@/stores/authStore';
 import { API_BASE } from '@/lib/config';
+import { playbackCache } from '@/lib/playbackCache';
 
 const VideoPlayer = dynamic(() => import('@/components/VideoPlayer'), {
   ssr: false,
@@ -60,6 +61,28 @@ export default function MoviePlayPage({ params }: { params: Promise<Params> }) {
 
   useEffect(() => {
     const fetchPlaybackData = async () => {
+      // 1. Try to read from prefetch cache
+      const cached = playbackCache.get(pluginId, chapterId);
+      
+      if (cached && cached.sources) {
+        setSources(cached.sources);
+        setComments(cached.comments || []);
+        setLoading(false);
+        setError('');
+        
+        // Fetch chapters list in the background
+        try {
+          const chaptersRes = await fetch(`${API_BASE}/api/plugins/${pluginId}/chapters/${mediaId}`);
+          const chaptersData = await chaptersRes.json();
+          const list: Chapter[] = chaptersData.chapters || [];
+          setChapters(list);
+          setCurrentChapter(list.find((c) => c.id === chapterId) || null);
+        } catch (err) {
+          console.warn('[MoviePlayPage] Background chapters fetch failed:', err);
+        }
+        return;
+      }
+
       setLoading(true);
       setError('');
       try {
@@ -217,6 +240,9 @@ export default function MoviePlayPage({ params }: { params: Promise<Params> }) {
             sources={sources}
             title={currentChapter?.title || 'Current Chapter'}
             comments={comments}
+            pluginId={pluginId}
+            mediaId={mediaId}
+            chapterId={chapterId}
             onSendComment={handleSendComment}
             onNextChapter={nextChapter ? handleNextChapterClick : undefined}
             onProgress={(time, duration) => {

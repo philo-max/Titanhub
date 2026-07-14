@@ -1,81 +1,185 @@
-# Titanhub - ACG All-in-One Aggregation Platform
+<p align="center">
+  <h1>Titanhub</h1>
+  <p><strong>One App, All ACG Content.</strong></p>
+  <p>Anime / Manga / Novel / Movie — 聚合搜索、追番追踪、弹幕播放，一站式搞定。</p>
+</p>
 
-> One App, All ACG Content (Anime, Manga, Novels, Movies).
-
-Titanhub is a modern cross-platform aggregator for ACG content. It features a Flutter mobile/desktop client, a GSAP-powered Next.js 15 web client, and a lightweight Hono API backend running on Bun.
-
----
-
-## Key Features
-
-1. **Wasm Sandbox HTML Parsing Engine (v2)**: Parses HTML web documents natively inside a secure WebAssembly QuickJS sandbox context (`quickjs-emscripten`) by utilizing a host-side `cheerio` parsing bridge.
-2. **Parallel Multi-Node Scraper Aggregation**: Queries all activated/loaded plugin nodes concurrently using parallel asynchronous requests and merges results with dynamic origin badges.
-3. **GPU-Accelerated 3D Hover Tilt Effects**: Implements responsive cursor-tracking transformations on web content cards utilizing GSAP ticker loops at a locked 144Hz refresh rate.
-4. **Manga/Novel Reader Layouts**:
-   - **Manga Reader**: Provides horizontal paginated slide views with GSAP transitions and continuous vertical scroll strip listings (Web), as well as multi-touch zoom and panning views (Flutter).
-   - **Novel Reader**: Includes immersive Zen-mode typography controllers (sepia, dark obsidian, mint, and light themes) and text scaling custom parameters, drawing design layouts and annotations from **Readest** and **LNReader**.
+<p align="center">
+  <img src="https://img.shields.io/badge/Web-Next.js%2015-black?logo=next.js" alt="Next.js" />
+  <img src="https://img.shields.io/badge/Mobile-Flutter%203-blue?logo=flutter" alt="Flutter" />
+  <img src="https://img.shields.io/badge/API-Hono%20%2B%20Bun-orange?logo=bon" alt="Hono" />
+  <img src="https://img.shields.io/badge/DB-PostgreSQL%20%2B%20Drizzle%20ORM-blue?logo=postgresql" alt="PostgreSQL" />
+  <img src="https://img.shields.io/badge/Monorepo-Turborepo%20%2B%20pnpm-179297?logo=turborepo" alt="Turborepo" />
+  <img src="https://img.shields.io/badge/License-MIT-green" alt="MIT" />
+</p>
 
 ---
 
-## Monorepo Project Structure
+## 项目简介
 
-This project is configured as a Turborepo monorepo managed with `pnpm` workspaces:
+Titanhub 是一个面向 ACG 内容消费者的跨平台聚合平台。用户无需在多个应用间切换，一个 App 即可搜索、浏览、阅读和播放来自不同数据源（番剧、漫画、轻小说、影视）的内容，并支持跨设备追番进度同步。
+
+项目采用 **Turborepo monorepo** 架构，包含三个核心子工程：
+
+- **Web 前端** — Next.js 15 (App Router) + React 19 + Tailwind CSS v4 + GSAP 动效
+- **移动端** — Flutter 3 (Riverpod + Drift 本地数据库 + media_kit 播放器)
+- **API 后端** — Hono (Bun/Node.js 双运行时) + Drizzle ORM + PostgreSQL
+
+## 核心特性
+
+### 1. Wasm 沙箱插件引擎 (Plugin Sandbox)
+
+采用 `quickjs-emscripten` 在 WebAssembly 沙箱中安全执行第三方插件规则，通过 `cheerio` 解析桥实现原生 HTML DOM 操作。每个插件在隔离的 QuickJS 运行时中运行，主线程不受阻塞，恶意脚本无法访问宿主环境。
+
+插件还支持 `xpath-sandbox`（XML Path 解析）和 `venera-adapter`（Venera 格式插件兼容），并提供 `plugin-adapter` 跨引擎适配层，同一套插件可在 Web Worker、Bun 后端和 Flutter 的 `flutter_js` 中运行。
+
+### 2. 并行多源聚合搜索
+
+前端通过并发的异步请求同时查询所有已加载的插件节点，结果实时合并，每个内容卡片自动标注来源标签（origin badge），用户可一键切换不同数据源。
+
+### 3. 多类型内容阅读器
+
+| 类型 | Web 端 | 移动端 |
+|------|--------|--------|
+| 漫画 | 水平翻页滑动 (GSAP 过渡动画) + 垂直长条滚动 | 多触控缩放平移 |
+| 轻小说 | 沉浸式 Zen 模式，4 套排版主题（暗岩/薄荷/羊皮纸/亮色）+ 自定义字号 | 全屏阅读 + 主题切换 |
+| 番剧/影视 | HLS.js 流媒体播放 + 弹幕层 | media_kit 原生播放器 |
+
+### 4. GSAP GPU 加速动效
+
+Web 端内容卡片实现了 144Hz 锁帧的 GPU 加速 3D 悬停倾斜效果（GSAP ticker loop），HeroBanner 轮播、页面切换均有流畅的过渡动画。
+
+### 5. 追番追踪与跨端同步
+
+基于 JWT 的用户认证系统，PostgreSQL 持久化存储用户的追番记录（进度、状态、评分）。通过 `/sync` API 支持多端进度同步，包括观看进度、阅读章节和追番状态。
+
+### 6. 弹幕系统
+
+内置弹幕路由（`/danmaku`），支持弹幕获取、发送和增强过滤。
+
+## 技术架构
 
 ```
 Titanhub/
 ├── apps/
-│   ├── mobile/                  # Flutter Mobile & Desktop Client
-│   └── web/                     # Next.js 15 Web Frontend (Tailwind CSS v4 + GSAP)
-├── server/                      # Hono API Backend (Bun Runtime)
+│   ├── web/                     # Next.js 15 Web 前端
+│   │   ├── src/
+│   │   │   ├── app/             # App Router 页面 (anime/manga/novel/movie/search)
+│   │   │   ├── components/      # UI 组件 (MediaCard, VideoPlayer, DanmakuLayer...)
+│   │   │   ├── stores/          # Zustand 状态管理
+│   │   │   └── lib/             # 工具函数与 GSAP 动画配置
+│   │   └── package.json
+│   └── mobile/                  # Flutter 移动端
+│       ├── lib/
+│       │   ├── core/            # 路由、数据库、主题
+│       │   ├── features/        # 媒体、播放器、阅读器、搜索、追踪
+│       │   └── main.dart
+│       └── pubspec.yaml
+├── server/                      # Hono API 后端
+│   ├── src/
+│   │   ├── routes/              # RESTful 路由 (aggregate, auth, danmaku, sync)
+│   │   ├── plugins/             # 插件引擎 (sandbox, sniffer, manager)
+│   │   ├── auth/                # JWT 认证
+│   │   ├── db/                  # Drizzle ORM schema + migrations
+│   │   └── index.ts             # 服务入口
+│   └── package.json
 ├── packages/
-│   └── plugin-types/            # Shared TypeScript Interfaces for Plugins
-├── docs/                        # Specifications and design documents
-└── docker-compose.yml           # Local dev database services (Postgres, Redis, MinIO)
+│   ├── plugin-types/            # 插件标准 TypeScript 接口定义
+│   ├── plugin-adapter/          # 跨运行时插件适配层 (Web/Bun/Flutter)
+│   └── theme/                   # 跨端主题 token (CSS 变量 → Flutter ThemeData)
+├── docs/                         # 设计文档与开发规范
+├── docker-compose.yml           # PostgreSQL 开发环境
+├── turbo.json                    # Turborepo 管线配置
+└── pnpm-workspace.yaml
 ```
 
-## Prerequisites
+### 技术栈一览
 
-- **Bun** (>= 1.0)
-- **Node.js** (>= 20) & **pnpm** (>= 9.0)
-- **Flutter** (>= 3.x) & Dart SDK
-- **Docker & Docker Compose** (for database services)
+| 层级 | 技术选型 |
+|------|----------|
+| Web 框架 | Next.js 15 (App Router) + React 19 + TypeScript |
+| 样式 | Tailwind CSS v4 + GSAP 3 动画 |
+| 状态管理 | Zustand (Web) / Riverpod (Flutter) |
+| 移动端 | Flutter 3 + Dart + go_router + Drift (SQLite) |
+| API 框架 | Hono + tsx (Node) / Bun 双运行时 |
+| ORM | Drizzle ORM (type-safe schema → PostgreSQL migrations) |
+| 数据库 | PostgreSQL 15 (Docker) |
+| 认证 | JWT (bcryptjs 密码哈希) |
+| 插件引擎 | quickjs-emscripten (Wasm sandbox) + cheerio + xpath |
+| 播放器 | HLS.js (Web) / media_kit (Flutter) |
+| Monorepo | Turborepo + pnpm workspaces |
+| CI/CD | GitHub Actions (Lint → Test → TypeCheck → Android APK build) |
+| 测试 | Vitest (Web/Server) / flutter_test (Mobile) |
 
-## Getting Started
+## 快速开始
 
-### 1. Database Setup
+### 前置要求
 
-Spin up the local PostgreSQL instance (Redis and MinIO are reserved for future storage/caching extensions and commented out by default to minimize local resource footprint):
+- **Node.js** >= 20 & **pnpm** >= 9
+- **Bun** >= 1.0 (可选，server 支持 Bun 运行时)
+- **Flutter** >= 3.x + Dart SDK (移动端)
+- **Docker & Docker Compose** (数据库服务)
+
+### 1. 启动数据库
 
 ```bash
 docker compose up -d
 ```
 
-### 2. Install Workspace Dependencies
-
-At the workspace root, run:
+### 2. 安装依赖
 
 ```bash
 pnpm install
 ```
 
-### 3. Run Development Servers
+### 3. 配置环境变量
 
-Start the Next.js frontend (`localhost:3000`) and the Bun/Hono backend (`localhost:3001`) simultaneously:
+```bash
+cp .env.example .env
+# 编辑 .env，填入 DATABASE_URL 和 TOKEN_SECRET
+```
+
+### 4. 启动开发服务
+
+一键启动 Web 前端 (`localhost:3000`) 和 API 后端 (`localhost:3001`)：
 
 ```bash
 pnpm run dev
 ```
 
-### 4. Run Flutter Client
-
-Navigate to `apps/mobile` and run:
+### 5. 运行 Flutter 客户端
 
 ```bash
+cd apps/mobile
+flutter pub get
 flutter run
 ```
 
----
+### 6. 运行测试
 
-## Shared Packages
+```bash
+pnpm run test
+```
 
-- `@titanhub/plugin-types`: Defines the standard interfaces (`TitanhubPlugin`, `MediaItem`, `Chapter`, etc.) for building and running JS rules safely inside the Web Worker (QuickJS-EMScripten), Dart (`flutter_js`), or Bun engines.
+## 插件系统
+
+Titanhub 的核心竞争力在于可扩展的插件架构。每个插件是一个独立的 JS 规则文件，运行在安全的 QuickJS Wasm 沙箱中，定义了如何解析特定数据源的 HTML 结构。
+
+- **`@titanhub/plugin-types`** 定义标准接口 (`TitanhubPlugin`, `MediaItem`, `Chapter` 等)
+- **`@titanhub/plugin-adapter`** 提供跨运行时适配，同一插件可在 Web/Bun/Flutter 中执行
+- **`server/plugins/sandbox.ts`** 后端插件沙箱，负责安全执行和超时控制
+- **`server/plugins/sniffer.ts`** 自动识别内容类型并路由到对应插件
+
+内置 MangaDex 真实插件作为参考实现。
+
+## 项目结构说明
+
+- `apps/web` — 基于 Next.js 15 App Router 的 SPA，包含番剧/漫画/轻小说/影视四大内容模块的完整页面、GSAP 动画引擎、HLS 播放器和弹幕层。
+- `apps/mobile` — Flutter 跨端客户端，使用 Riverpod 状态管理 + Drift 本地持久化 + media_kit 原生播放，支持 Android/iOS/桌面。
+- `server` — 轻量 Hono API，提供聚合搜索、JWT 认证、追番同步、弹幕 CRUD，通过 Drizzle ORM 管理 PostgreSQL。
+- `packages/` — Monorepo 共享包，包含插件类型定义、跨运行时适配器和统一主题 token。
+- `docs/` — 设计文档（Titanhub-Design.md）、插件开发指南、迭代记录。
+
+## 许可证
+
+[MIT](LICENSE)

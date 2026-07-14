@@ -8,12 +8,13 @@ import {
   animatePlayPageExitNext,
   animatePlayPageExitBack,
 } from '@/lib/animations';
-import { ArrowLeft, Play, RefreshCw, Loader2, Compass } from 'lucide-react';
+import { ArrowLeft, Play, Loader2, Compass } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { DanmakuComment } from '@/components/DanmakuLayer';
 import { useSyncStore } from '@/stores/syncStore';
 import { useAuthStore } from '@/stores/authStore';
 import { API_BASE } from '@/lib/config';
+import { playbackCache } from '@/lib/playbackCache';
 
 const VideoPlayer = dynamic(() => import('@/components/VideoPlayer'), {
   ssr: false,
@@ -60,12 +61,49 @@ export default function AnimePlayPage({ params }: { params: Promise<Params> }) {
 
   useEffect(() => {
     const fetchPlaybackData = async () => {
+      // 1. Try to read from prefetch cache
+      const cached = playbackCache.get(pluginId, chapterId);
+      
+      if (cached && cached.sources) {
+        setSources(cached.sources);
+        setComments(cached.comments || []);
+        setLoading(false);
+        setError('');
+        
+        // Fetch chapters list in the background
+        try {
+          const chaptersRes = await fetch(`${API_BASE}/api/plugins/${pluginId}/chapters/${mediaId}`);
+          const chaptersData = await chaptersRes.json();
+          const list: Chapter[] = chaptersData.chapters || [];
+          setChapters(list);
+          setCurrentChapter(list.find((c) => c.id === chapterId) || null);
+        } catch (err) {
+          console.warn('[AnimePlayPage] Background chapters fetch failed:', err);
+        }
+        return;
+      }
+
       setLoading(true);
       setError('');
       try {
-        // 1. Fetch video URL from sandbox
-        const videoRes = await fetch(`${API_BASE}/api/plugins/${pluginId}/video/${chapterId}`);
-        const videoData = await videoRes.json();
+        // Fetch video URL, chapter list and danmaku in parallel; chapters must
+        // survive a video failure so the error state can offer other episodes
+        const [videoData, chaptersData, danmakuData] = await Promise.all([
+          fetch(`${API_BASE}/api/plugins/${pluginId}/video/${chapterId}`)
+            .then((r) => r.json())
+            .catch(() => ({ error: '无法连接后端服务。' })),
+          fetch(`${API_BASE}/api/plugins/${pluginId}/chapters/${mediaId}`)
+            .then((r) => r.json())
+            .catch(() => ({ chapters: [] })),
+          fetch(`${API_BASE}/api/danmaku/${pluginId}/${mediaId}/${chapterId}`)
+            .then((r) => r.json())
+            .catch(() => ({ comments: [] })),
+        ]);
+
+        const list: Chapter[] = chaptersData.chapters || [];
+        setChapters(list);
+        setCurrentChapter(list.find((c) => c.id === chapterId) || null);
+        setComments(danmakuData.comments || []);
 
         if (videoData.error) {
           throw new Error(`获取视频链接失败: ${videoData.error}`);
@@ -73,31 +111,9 @@ export default function AnimePlayPage({ params }: { params: Promise<Params> }) {
 
         const sourceList: VideoSource[] = videoData.videos || [];
         if (sourceList.length === 0) {
-          throw new Error('未解析出可用的视频播放源。');
+          throw new Error('未解析出可用的视频播放源，该线路可能已失效。');
         }
-        // Select the highest quality or first source
         setSources(sourceList);
-
-        // 2. Fetch all chapters for navigation and episode list
-        const chaptersRes = await fetch(`${API_BASE}/api/plugins/${pluginId}/chapters/${mediaId}`);
-        const chaptersData = await chaptersRes.json();
-
-        if (chaptersData.error) {
-          throw new Error(`获取选集列表失败: ${chaptersData.error}`);
-        }
-
-        const list: Chapter[] = chaptersData.chapters || [];
-        setChapters(list);
-
-        const activeCh = list.find((c) => c.id === chapterId) || null;
-        setCurrentChapter(activeCh);
-
-        // 3. Fetch mock danmaku list
-        const danmakuRes = await fetch(
-          `${API_BASE}/api/danmaku/${pluginId}/${mediaId}/${chapterId}`
-        );
-        const danmakuData = await danmakuRes.json();
-        setComments(danmakuData.comments || []);
       } catch (err: any) {
         setError(err.message || '加载播放资源失败。');
       } finally {
@@ -167,7 +183,7 @@ export default function AnimePlayPage({ params }: { params: Promise<Params> }) {
 
   if (error || sources.length === 0) {
     return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6 text-textPrimary">
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6 py-16 text-textPrimary">
         <div className="max-w-md p-6 rounded-2xl border border-rose-500/20 bg-rose-500/5 text-center">
           <h2 className="text-lg font-bold text-rose-400 mb-2">播放失败</h2>
           <p className="text-sm text-textSecondary mb-6">{error}</p>
@@ -178,6 +194,32 @@ export default function AnimePlayPage({ params }: { params: Promise<Params> }) {
             返回详情页
           </Link>
         </div>
+
+        {chapters.length > 0 && (
+          <div className="w-full max-w-3xl mt-10">
+            <p className="text-sm text-textSecondary text-center mb-4">
+              该集解析失败，换一条线路或其他选集试试：
+            </p>
+            <div className="flex flex-wrap gap-3 justify-center max-h-64 overflow-y-auto">
+              {chapters.map((ch) => {
+                const isActive = ch.id === chapterId;
+                return (
+                  <Link
+                    key={ch.id}
+                    href={`/anime/${pluginId}/${mediaId}/play/${ch.id}`}
+                    className={`text-xs px-4 py-2.5 rounded-xl border font-semibold transition-all active:scale-95 ${
+                      isActive
+                        ? 'bg-rose-500/20 border-rose-500/40 text-rose-300'
+                        : 'bg-surface border-border text-textSecondary hover:text-textPrimary hover:border-surfaceLight'
+                    }`}
+                  >
+                    {ch.title}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -217,6 +259,9 @@ export default function AnimePlayPage({ params }: { params: Promise<Params> }) {
             sources={sources}
             title={currentChapter?.title || 'Current Chapter'}
             comments={comments}
+            pluginId={pluginId}
+            mediaId={mediaId}
+            chapterId={chapterId}
             onSendComment={handleSendComment}
             onNextChapter={nextChapter ? handleNextChapterClick : undefined}
             onProgress={(time, duration) => {

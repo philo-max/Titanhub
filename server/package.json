@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.13.7",
+    "@titanhub/plugin-adapter": "workspace:*",
     "@titanhub/plugin-types": "workspace:*",
     "@xmldom/xmldom": "^0.9.10",
     "bcryptjs": "^3.0.3",
@@ -25,7 +26,6 @@
     "xpath": "^0.0.34"
   },
   "devDependencies": {
-    "@titanhub/plugin-adapter": "workspace:*",
     "@types/bcryptjs": "^3.0.0",
     "@types/node": "^20.0.0",
     "@types/pg": "^8.20.0",

@@ -35,6 +35,17 @@ describe('adaptKazumi', () => {
     const { searchURL, ...incomplete } = kazumiRule;
     expect(() => adaptKazumi(incomplete as any)).toThrow(/searchURL/);
   });
+
+  it('accepts native Kazumi rules using the baseURL field casing', () => {
+    const { baseUrl, ...rest } = kazumiRule;
+    const plugin = adaptKazumi({ ...rest, baseURL: 'https://native.example.com/' });
+    expect(plugin.code).toContain('https://native.example.com/');
+  });
+
+  it('rejects rules missing both baseUrl and baseURL', () => {
+    const { baseUrl, ...incomplete } = kazumiRule;
+    expect(() => adaptKazumi(incomplete as any)).toThrow(/baseUrl/);
+  });
 });
 
 describe('adaptVenera', () => {

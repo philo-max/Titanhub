@@ -17,6 +17,7 @@ import {
 import Hls from 'hls.js';
 import DanmakuLayer, { DanmakuComment } from './DanmakuLayer';
 import { animateControlsVisibility } from '../lib/animations';
+import { API_BASE } from '@/lib/config';
 
 export interface VideoSource {
   quality: string;
@@ -30,6 +31,9 @@ interface VideoPlayerProps {
   onNextChapter?: () => void;
   onProgress?: (time: number, duration: number) => void;
   onSendComment?: (text: string, time: number) => void;
+  pluginId?: string;
+  mediaId?: string;
+  chapterId?: string;
 }
 
 export default function VideoPlayer({
@@ -39,6 +43,9 @@ export default function VideoPlayer({
   onNextChapter,
   onProgress,
   onSendComment,
+  pluginId,
+  mediaId,
+  chapterId,
 }: VideoPlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -298,6 +305,42 @@ export default function VideoPlayer({
     onSendComment?.(userComment.text, userComment.time);
   };
 
+  // Fetch hotspots to plot high-energy segments above seekbar
+  const [hotspots, setHotspots] = useState<{ position: number; intensity: number; time: number }[]>([]);
+
+  useEffect(() => {
+    if (!pluginId || !mediaId || !chapterId) return;
+
+    const fetchHotspots = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/danmaku/hotspots/${pluginId}/${mediaId}/${chapterId}`);
+        const data = await res.json();
+        if (data && data.hotspots) {
+          setHotspots(data.hotspots);
+        }
+      } catch (err) {
+        console.warn('[VideoPlayer] Failed to load hotspots:', err);
+      }
+    };
+    fetchHotspots();
+  }, [pluginId, mediaId, chapterId]);
+
+  const generatePath = () => {
+    if (hotspots.length === 0) return '';
+    const sorted = [...hotspots].sort((a, b) => a.position - b.position);
+    let path = `M 0 100`;
+    if (sorted[0].position > 0) {
+      path += ` L 0 100`;
+    }
+    sorted.forEach((h) => {
+      const x = h.position * 100;
+      const y = 100 - h.intensity * 85;
+      path += ` L ${x} ${y}`;
+    });
+    path += ` L 100 100 Z`;
+    return path;
+  };
+
   // Hover animations for controls using GSAP
   const showControls = () => {
     if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
@@ -354,13 +397,26 @@ export default function VideoPlayer({
       >
         {/* Progress Bar */}
         <div className="relative group/progress mb-4 w-full">
+          {hotspots.length > 0 && (
+            <div className="absolute left-0 right-0 bottom-full h-7 pointer-events-none overflow-hidden opacity-35 group-hover/progress:opacity-85 transition-opacity duration-300">
+              <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="hotspot-grad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="var(--color-primary)" stopOpacity="0.8" />
+                    <stop offset="100%" stopColor="var(--color-primary)" stopOpacity="0.0" />
+                  </linearGradient>
+                </defs>
+                <path d={generatePath()} fill="url(#hotspot-grad)" />
+              </svg>
+            </div>
+          )}
           <input
             type="range"
             min="0"
             max={duration || 100}
             value={currentTime}
             onChange={handleSeek}
-            className="w-full h-1 bg-surface rounded-full appearance-none cursor-pointer group-hover/progress:h-2 transition-all outline-none accent-primary bg-gradient-to-r from-primary to-secondary"
+            className="w-full h-1 bg-surface rounded-full appearance-none cursor-pointer group-hover/progress:h-2 transition-all outline-none accent-primary bg-gradient-to-r from-primary to-secondary z-10 relative"
             style={{
               background: `linear-gradient(to right, var(--color-primary) 0%, var(--color-secondary) ${
                 (currentTime / (duration || 1)) * 100

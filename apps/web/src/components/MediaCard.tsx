@@ -77,12 +77,20 @@ export default function MediaCard({
       style={{ transformStyle: 'preserve-3d' }}
     >
       <div className="relative aspect-[2/3] w-full overflow-hidden rounded-xl bg-surfaceLight">
-        <img
-          ref={imageRef}
-          src={item.cover}
-          alt={item.title}
-          className="absolute inset-0 w-full h-full object-cover scale-[1.05]"
-        />
+        {item.cover ? (
+          <img
+            ref={imageRef}
+            src={item.cover}
+            alt={item.title}
+            className="absolute inset-0 w-full h-full object-cover scale-[1.05]"
+          />
+        ) : (
+          <div className="absolute inset-0 w-full h-full bg-gradient-to-br from-primary/20 via-surface to-secondary/20 flex items-center justify-center">
+            <span className="text-4xl font-black text-textSecondary/40 select-none">
+              {item.title?.charAt(0) || '?'}
+            </span>
+          </div>
+        )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
         {item.updateInfo && (
           <div className="absolute top-2 right-2 px-2 py-1 bg-background/80 backdrop-blur-md rounded-md text-xs font-bold text-secondary border border-border">

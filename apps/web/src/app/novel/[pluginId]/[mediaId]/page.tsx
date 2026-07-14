@@ -9,7 +9,7 @@ import {
   animateDetailPageExitPlay,
 } from '@/lib/animations';
 import { ArrowLeft, BookOpen, Calendar, User, Compass, HelpCircle, Loader2 } from 'lucide-react';
-import { API_BASE } from '@/lib/config';
+import { API_BASE, recordMediaView } from '@/lib/config';
 
 interface Params {
   pluginId: string;
@@ -37,6 +37,7 @@ export default function NovelDetailPage({ params }: { params: Promise<Params> })
   const { pluginId, mediaId } = use(params);
   const router = useRouter();
   const pageRef = useRef<HTMLDivElement>(null);
+  const viewRecordedRef = useRef<string | null>(null);
   const [detail, setDetail] = useState<MediaDetail | null>(null);
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [loading, setLoading] = useState(true);
@@ -55,6 +56,16 @@ export default function NovelDetailPage({ params }: { params: Promise<Params> })
           throw new Error(detailData.error);
         }
         setDetail(detailData.detail);
+        if (viewRecordedRef.current !== mediaId) {
+          viewRecordedRef.current = mediaId;
+          recordMediaView({
+            mediaType: 'novel',
+            mediaId,
+            pluginId,
+            title: detailData.detail.title,
+            cover: detailData.detail.cover,
+          });
+        }
 
         // Fetch chapters list
         const chaptersRes = await fetch(`${API_BASE}/api/plugins/${pluginId}/chapters/${mediaId}`);
