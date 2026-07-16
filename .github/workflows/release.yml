@@ -34,6 +34,9 @@ jobs:
       - name: Run Lint
         run: pnpm run lint
 
+      - name: Install Playwright Browsers
+        run: npx playwright install --with-deps chromium
+
       - name: Run Backend Tests
         run: pnpm --filter titanhub-server test
 
