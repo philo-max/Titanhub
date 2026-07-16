@@ -2,7 +2,6 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { mockRanking } from '../lib/mockData';
 import { animateCounter } from '../lib/animations';
 import { useHomeStore } from '../stores/homeStore';
 import { API_BASE } from '../lib/config';
@@ -54,7 +53,7 @@ export default function RankingSidebar() {
               id: row.mediaId,
               title: row.title,
               category: CATEGORY_NAMES[row.mediaType] || row.mediaType,
-              views: `${row.views} 次浏览`,
+              views: row.views > 0 ? `${row.views} 次浏览` : '热门推荐',
               pluginId: row.pluginId,
               mediaType: row.mediaType,
             }))
@@ -67,15 +66,8 @@ export default function RankingSidebar() {
       }
 
       if (cancelled) return;
-      const matchedMocks = mockRanking
-        .filter((r) => r.category.toLowerCase() === activeCategory.toLowerCase())
-        .map((r) => ({
-          id: r.id,
-          title: r.title,
-          category: r.category,
-          views: r.views,
-        }));
-      setItems(matchedMocks.length > 0 ? matchedMocks : mockRanking.slice(0, 5));
+      // No fallback to fake data — show empty state instead
+      setItems([]);
     };
 
     fetchRanking();
@@ -105,6 +97,12 @@ export default function RankingSidebar() {
         Trending
       </h2>
       <div className="flex flex-col gap-4">
+        {items.length === 0 && (
+          <div className="text-center py-8">
+            <p className="text-sm text-textSecondary">暂无排行数据</p>
+            <p className="text-xs text-textTertiary mt-1">浏览内容后将生成排行</p>
+          </div>
+        )}
         {items.map((item, index) => {
           const content = (
             <div className="flex items-center gap-4 p-3 rounded-xl hover:bg-white/5 transition-colors cursor-pointer group w-full text-left">

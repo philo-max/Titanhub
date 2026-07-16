@@ -44,14 +44,16 @@ aggregate.get('/home', async (c) => {
         try {
           const result = await withTimeout(PluginManager.explore(plugin.id, type), plugin.id);
           if (!result.success || !Array.isArray(result.data)) return [];
+          const providesVideo = !/providesVideo\s*:\s*false/.test(plugin.code);
           return result.data.map((item): AggregatedMediaItem => ({
             ...item,
             pluginId: plugin.id,
             pluginName: plugin.name,
             mediaType: type,
+            providesVideo,
           }));
         } catch (err: any) {
-          console.warn(`[aggregate/home] Plugin '${plugin.id}' skipped: ${err.message}`);
+          console.warn(`[aggregate/home] Plugin '${plugin.id}' explore failed: ${err.message || err}`);
           return [];
         }
       })
@@ -109,11 +111,13 @@ aggregate.get('/search', async (c) => {
           const mediaType = (
             type && plugin.types.includes(type) ? type : plugin.types[0]
           ) as MediaType;
+          const providesVideo = !/providesVideo\s*:\s*false/.test(plugin.code);
           return result.data.map((item): AggregatedMediaItem => ({
             ...item,
             pluginId: plugin.id,
             pluginName: plugin.name,
             mediaType,
+            providesVideo,
           }));
         } catch (err: any) {
           console.warn(`[aggregate/search] Plugin '${plugin.id}' skipped: ${err.message}`);
@@ -187,6 +191,32 @@ aggregate.get('/ranking', async (c) => {
       .where(type ? eq(mediaViews.mediaType, type) : undefined)
       .orderBy(desc(mediaViews.views))
       .limit(limit);
+
+    // If no view data yet, fall back to explore data from video-capable plugins
+    // so the sidebar shows real content instead of fake mock data.
+    if (rows.length === 0 && type) {
+      const all = await getPlugins();
+      const eligible = all.filter((p) => p.isActive && p.types.includes(type));
+      const perPlugin = await Promise.all(
+        eligible.map(async (plugin) => {
+          try {
+            const result = await withTimeout(PluginManager.explore(plugin.id, type), plugin.id);
+            if (!result.success || !Array.isArray(result.data)) return [];
+            return result.data.slice(0, 3).map((item) => ({
+              mediaId: item.id,
+              title: item.title,
+              pluginId: plugin.id,
+              mediaType: type,
+              views: 0,
+            }));
+          } catch {
+            return [];
+          }
+        })
+      );
+      const fallback = perPlugin.flat().slice(0, limit);
+      return c.json({ items: fallback });
+    }
 
     return c.json({ items: rows });
   } catch (err: any) {

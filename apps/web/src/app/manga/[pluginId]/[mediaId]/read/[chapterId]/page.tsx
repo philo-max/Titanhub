@@ -93,14 +93,14 @@ function LazyMangaImage({
   return (
     <div
       ref={containerRef}
-      className={`w-full flex items-center justify-center bg-slate-900/20 border border-slate-900/60 rounded-2xl overflow-hidden relative transition-all duration-300 ${
+      className={`w-full flex items-center justify-center bg-surface/20 border border-borderSubtle/60 rounded-2xl overflow-hidden relative transition-all duration-300 ${
         mode === 'vertical' ? 'min-h-[450px]' : 'h-full'
       }`}
     >
       {shouldLoad ? (
         <>
           {status === 'loading' && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500 bg-slate-950/70 backdrop-blur-sm z-10">
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-textTertiary bg-background/70 backdrop-blur-sm z-10">
               <Loader2 className="h-8 w-8 text-primary animate-spin mb-3" />
               <span className="text-xs">第 {pageNum} 页正在全力加载...</span>
             </div>
@@ -132,14 +132,14 @@ function LazyMangaImage({
           />
         </>
       ) : (
-        <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-600 bg-slate-950/40">
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-textTertiary bg-background/40">
           <BookOpen className="h-6 w-6 mb-2 opacity-35" />
           <span className="text-xs font-mono">第 {pageNum} 页 / 共 {total} 页</span>
         </div>
       )}
 
       {status === 'loaded' && (
-        <div className="absolute bottom-4 right-4 bg-black/60 backdrop-blur-sm px-2.5 py-1 rounded text-[10px] font-mono text-slate-400 z-20">
+        <div className="absolute bottom-4 right-4 bg-black/60 backdrop-blur-sm px-2.5 py-1 rounded text-[10px] font-mono text-textSecondary z-20">
           {pageNum} / {total}
         </div>
       )}
@@ -282,7 +282,7 @@ export default function MangaReaderPage({ params }: { params: Promise<Params> })
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-400">
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center text-textSecondary">
         <Loader2 className="h-10 w-10 text-violet-500 animate-spin mb-4" />
         <p className="text-sm tracking-wider">正在隔离沙箱中解析并抓取漫画图片列表...</p>
       </div>
@@ -291,13 +291,13 @@ export default function MangaReaderPage({ params }: { params: Promise<Params> })
 
   if (error || images.length === 0) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 text-center">
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 text-center">
         <Layers className="h-16 w-16 text-rose-500 mb-4" />
-        <h2 className="text-2xl font-bold text-slate-200 mb-2">加载阅读器失败</h2>
-        <p className="text-slate-400 max-w-md mb-6">{error || '抓取章节返回的图片链接为空。'}</p>
+        <h2 className="text-2xl font-bold text-textPrimary mb-2">加载阅读器失败</h2>
+        <p className="text-textSecondary max-w-md mb-6">{error || '抓取章节返回的图片链接为空。'}</p>
         <button
           onClick={() => router.back()}
-          className="flex items-center bg-slate-900 border border-slate-800 text-slate-300 px-6 py-2.5 rounded-xl hover:border-slate-700 active:scale-95 transition-all text-sm font-medium cursor-pointer"
+          className="flex items-center bg-surface border border-borderSubtle text-textSecondary px-6 py-2.5 rounded-xl hover:border-border active:scale-95 transition-all text-sm font-medium cursor-pointer"
         >
           <ArrowLeft className="h-4 w-4 mr-2" />
           返回详情页
@@ -307,48 +307,54 @@ export default function MangaReaderPage({ params }: { params: Promise<Params> })
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col relative overflow-hidden font-sans select-none">
+    <div className="min-h-screen bg-background text-textPrimary flex flex-col relative overflow-hidden font-sans select-none">
       {/* Top toolbar */}
-      <header className="z-40 flex justify-between items-center bg-slate-950/80 backdrop-blur-md border-b border-slate-900 px-6 py-4">
+      <header className="z-40 flex justify-between items-center bg-background/80 backdrop-blur-md border-b border-borderSubtle px-6 py-4">
         <div className="flex items-center space-x-4">
           <button
             onClick={() => router.back()}
-            className="text-slate-400 hover:text-white transition-colors cursor-pointer"
+            className="text-textSecondary hover:text-white transition-colors cursor-pointer"
           >
             <ArrowLeft className="h-5 w-5" />
           </button>
-          <div className="h-4 w-[1px] bg-slate-800" />
-          <h1 className="text-sm md:text-base font-semibold truncate max-w-[200px] md:max-w-sm text-slate-200">
-            {chapters.find((c) => c.id === chapterId)?.title || chapterId}
+          <div className="h-4 w-[1px] bg-surfaceLight" />
+          <h1 className="text-sm md:text-base font-semibold truncate max-w-[200px] md:max-w-sm text-textPrimary">
+            {(() => {
+              const ch = chapters.find((c) => c.id === chapterId);
+              if (ch?.title) return ch.title;
+              if (ch?.chapterNo) return `第 ${ch.chapterNo} 话`;
+              const idx = chapters.findIndex((c) => c.id === chapterId);
+              return idx >= 0 ? `第 ${idx + 1} 话` : '阅读中';
+            })()}
           </h1>
         </div>
 
         <div className="flex items-center space-x-3">
           {/* Zoom controls */}
-          <div className="hidden sm:flex items-center space-x-2 bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-xs">
+          <div className="hidden sm:flex items-center space-x-2 bg-surface border border-borderSubtle rounded-lg px-2 py-1 text-xs">
             <button
               onClick={() => setZoomLevel((z) => Math.max(50, z - 10))}
-              className="p-1 text-slate-400 hover:text-white cursor-pointer font-bold"
+              className="p-1 text-textSecondary hover:text-white cursor-pointer font-bold"
             >
               -
             </button>
-            <span className="text-slate-300 w-10 text-center font-mono">{zoomLevel}%</span>
+            <span className="text-textSecondary w-10 text-center font-mono">{zoomLevel}%</span>
             <button
               onClick={() => setZoomLevel((z) => Math.min(150, z + 10))}
-              className="p-1 text-slate-400 hover:text-white cursor-pointer font-bold"
+              className="p-1 text-textSecondary hover:text-white cursor-pointer font-bold"
             >
               +
             </button>
           </div>
 
           {/* Reader mode toggler */}
-          <div className="flex bg-slate-900 border border-slate-800 rounded-xl p-0.5">
+          <div className="flex bg-surface border border-borderSubtle rounded-xl p-0.5">
             <button
               onClick={() => setMode('vertical')}
               className={`flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                 mode === 'vertical'
                   ? 'bg-violet-500 text-white shadow-md shadow-violet-500/20'
-                  : 'text-slate-400 hover:text-white'
+                  : 'text-textSecondary hover:text-white'
               }`}
             >
               卷轴
@@ -358,7 +364,7 @@ export default function MangaReaderPage({ params }: { params: Promise<Params> })
               className={`flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                 mode === 'horizontal'
                   ? 'bg-violet-500 text-white shadow-md shadow-violet-500/20'
-                  : 'text-slate-400 hover:text-white'
+                  : 'text-textSecondary hover:text-white'
               }`}
             >
               单页
@@ -368,7 +374,7 @@ export default function MangaReaderPage({ params }: { params: Promise<Params> })
           {/* Chapter sidebar toggler */}
           <button
             onClick={() => setSidebarOpen(true)}
-            className="p-2 bg-slate-900 border border-slate-800 hover:border-slate-700 hover:text-white text-slate-400 rounded-xl transition-all cursor-pointer"
+            className="p-2 bg-surface border border-borderSubtle hover:border-border hover:text-white text-textSecondary rounded-xl transition-all cursor-pointer"
           >
             <Menu className="h-5 w-5" />
           </button>
@@ -399,7 +405,7 @@ export default function MangaReaderPage({ params }: { params: Promise<Params> })
         ) : (
           // Horizontal Sliding page reader
           <div className="relative w-full max-w-xl flex flex-col items-center justify-center h-[75vh]">
-            <div className="w-full flex-grow relative flex items-center justify-center bg-slate-950 rounded-2xl border border-slate-900 overflow-hidden shadow-2xl">
+            <div className="w-full flex-grow relative flex items-center justify-center bg-background rounded-2xl border border-borderSubtle overflow-hidden shadow-2xl">
               {/* Invisible touch hotspots for convenient desktop paging */}
               <div
                 onClick={handlePrevPage}
@@ -456,9 +462,9 @@ export default function MangaReaderPage({ params }: { params: Promise<Params> })
             </div>
 
             {/* Slider bottom progress bar */}
-            <div className="mt-4 flex items-center justify-between w-full px-2 text-xs font-mono text-slate-400">
+            <div className="mt-4 flex items-center justify-between w-full px-2 text-xs font-mono text-textSecondary">
               <span>第 {currentPage + 1} 页</span>
-              <div className="flex-grow mx-4 h-1 bg-slate-800 rounded-full overflow-hidden">
+              <div className="flex-grow mx-4 h-1 bg-surfaceLight rounded-full overflow-hidden">
                 <div
                   className="bg-violet-500 h-full transition-all duration-300"
                   style={{ width: `${((currentPage + 1) / images.length) * 100}%` }}
@@ -479,7 +485,7 @@ export default function MangaReaderPage({ params }: { params: Promise<Params> })
             onClick={() => setSidebarOpen(false)}
           />
           {/* Sidebar container */}
-          <div className="relative w-80 bg-slate-900 border-l border-slate-800 h-full flex flex-col p-6 shadow-2xl animate-slide-in">
+          <div className="relative w-80 bg-surface border-l border-borderSubtle h-full flex flex-col p-6 shadow-2xl animate-slide-in">
             <h3 className="text-base font-bold text-white mb-6 flex items-center space-x-2">
               <BookOpen className="h-5 w-5 text-violet-500" />
               <span>章节跳转</span>
@@ -496,7 +502,7 @@ export default function MangaReaderPage({ params }: { params: Promise<Params> })
                   className={`w-full text-left px-4 py-3 rounded-xl text-xs font-medium border transition-all cursor-pointer ${
                     ch.id === chapterId
                       ? 'bg-violet-500/10 border-violet-500/30 text-violet-400 font-bold'
-                      : 'bg-slate-950 border-slate-950 hover:border-slate-800 text-slate-400 hover:text-slate-200'
+                      : 'bg-background border-border hover:border-borderSubtle text-textSecondary hover:text-textPrimary'
                   }`}
                 >
                   {ch.title}

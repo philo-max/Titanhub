@@ -4,7 +4,7 @@ import { serve } from '@hono/node-server';
 import fs from 'fs/promises';
 import path from 'path';
 
-import { adaptKazumi } from '@titanhub/plugin-adapter';
+import { adaptKazumi, adaptLNReader } from '@titanhub/plugin-adapter';
 
 import { getPlugins, savePlugin, deletePlugin, getPlugin, setPluginActive } from './db/db';
 import { PluginManager } from './plugins/manager';
@@ -15,6 +15,7 @@ import danmakuRoutes from './routes/danmaku';
 import danmakuEnhanced from './routes/danmaku-enhanced';
 import aggregate from './routes/aggregate';
 import { PlaywrightSniffer } from './plugins/sniffer';
+import { M3u8AdFilter, M3u8Parser } from './plugins/m3u8';
 
 const app = new Hono();
 
@@ -120,12 +121,6 @@ app.get('/mock-site/dmzj/novel-101/chapter/:chapterId', (c) => {
 async function seedMockPlugin() {
   const seeds = [
     {
-      id: 'bilibili-mock',
-      name: 'Bilibili Mock Plugin',
-      types: ['anime'] as const,
-      file: 'mock-bilibili.js',
-    },
-    {
       id: 'dmzj-mock',
       name: 'DMZJ Scraper Mock Plugin',
       types: ['manga', 'novel'] as const,
@@ -202,7 +197,11 @@ app.get('/api/plugins', async (c) => {
   const list = await getPlugins();
   // Don't leak source code in index list to keep payload smaller
   return c.json({
-    plugins: list.map(({ code, ...rest }) => rest),
+    plugins: list.map(({ code, ...rest }) => ({
+      ...rest,
+      // Detect info-only plugins that export providesVideo: false
+      providesVideo: !/providesVideo\s*:\s*false/.test(code),
+    })),
   });
 });
 
@@ -224,6 +223,32 @@ app.post('/api/plugins', requireAuth, async (c) => {
     });
 
     return c.json({ success: true, plugin: saved });
+  } catch (e: any) {
+    return c.json({ error: e.message || String(e) }, 500);
+  }
+});
+
+// POST: Install an LNReader plugin (auto-wraps with LNReader runtime shim)
+app.post('/api/plugins/lnreader', requireAuth, async (c) => {
+  try {
+    const body = await c.req.json();
+    if (!body.id || !body.name || !body.source) {
+      return c.json({ error: 'Missing required parameters: id, name, source.' }, 400);
+    }
+
+    const adapted = adaptLNReader(body.source, {
+      id: body.id,
+      name: body.name,
+      version: body.version,
+    });
+
+    const saved = await savePlugin({
+      ...adapted,
+      isActive: body.isActive !== undefined ? body.isActive : true,
+    });
+
+    const { code, ...rest } = saved;
+    return c.json({ success: true, plugin: rest });
   } catch (e: any) {
     return c.json({ error: e.message || String(e) }, 500);
   }
@@ -344,6 +369,21 @@ app.get('/api/plugins/:id/explore/:type', async (c) => {
     return c.json({ error: result.error }, 500);
   }
   return c.json({ items: result.data });
+});
+
+// GET: M3U8 ad-filtered proxy — fetches an m3u8 URL, strips ad segments, returns clean playlist
+app.get('/api/m3u8/filter', async (c) => {
+  const url = c.req.query('url');
+  if (!url) {
+    return c.json({ error: 'Query parameter "url" is required.' }, 400);
+  }
+  try {
+    const filtered = await M3u8AdFilter.filterFromUrl(url);
+    c.header('Content-Type', 'application/vnd.apple.mpegurl');
+    return c.body(filtered);
+  } catch (err: any) {
+    return c.json({ error: err.message || String(err) }, 500);
+  }
 });
 
 // GET: Fetch mock Danmaku list for the video player

@@ -91,7 +91,7 @@ export default function ContentGrid() {
       <div ref={containerRef} className="w-full grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-6">
         {items.map((item) => {
           const href = detailHref(item);
-          const card = <MediaCard item={item} originBadge={item.pluginName} />;
+          const card = <MediaCard item={item} originBadge={item.pluginName} isInfoSource={item.providesVideo === false} />;
           return (
             <div key={`${activeCategory}-${item.pluginId}-${item.id}`} className="media-card-wrapper">
               {href ? <Link href={href}>{card}</Link> : card}

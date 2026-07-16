@@ -32,6 +32,7 @@ export interface AggregatedMediaItem extends MediaItem {
   pluginId: string;
   pluginName: string;
   mediaType: MediaType;
+  providesVideo?: boolean;
 }
 
 export interface TitanhubPlugin {

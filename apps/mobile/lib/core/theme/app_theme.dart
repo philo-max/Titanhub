@@ -3,25 +3,35 @@ import 'dart:ui';
 
 class AppTheme {
   // Colors
-  static const Color background = Color(0xFF0A0A0A);
-  static const Color surface = Color(0xFF0F172A);
-  static const Color surfaceLight = Color(0xFF1E293B);
+  static const Color background = Color(0xFF08090A);
+  static const Color surface = Color(0xFF0F1011);
+  static const Color surfaceLight = Color(0xFF181818);
+  static const Color surfaceElevated = Color(0xFF1F1F1F);
   static const Color primary = Color(0xFF8B5CF6);
+  static const Color primaryHover = Color(0xFFA78BFA);
   static const Color secondary = Color(0xFF06B6D4);
   static const Color accent = Color(0xFFD946EF);
-  static const Color textPrimary = Color(0xFFF1F5F9);
-  static const Color textSecondary = Color(0xFF94A3B8);
-  static const Color border = Color(0xFF1E293B);
+  static const Color success = Color(0xFF10B981);
+  static const Color warning = Color(0xFFFFA42B);
+  static const Color danger = Color(0xFFF3727F);
+  static const Color textPrimary = Color(0xFFF7F8F8);
+  static const Color textSecondary = Color(0xFFB3B3B3);
+  static const Color textTertiary = Color(0xFF8A8F98);
+  static const Color border = Color(0x00000000);
+  static const Color borderSubtle = Color(0x00000000);
+  static const Color borderStrong = Color(0x00000000);
 
   // Animations
-  static const Duration durationFast = Duration(milliseconds: 200);
-  static const Duration durationNormal = Duration(milliseconds: 400);
-  static const Duration durationSlow = Duration(milliseconds: 800);
+  static const Duration durationFast = Duration(milliseconds: 150);
+  static const Duration durationNormal = Duration(milliseconds: 300);
+  static const Duration durationSlow = Duration(milliseconds: 600);
 
   // Radii
   static const double radiusSM = 4.0;
-  static const double radiusMD = 8.0;
-  static const double radiusLG = 12.0;
-  static const double radiusXL = 16.0;
-  static const double radius2XL = 24.0;
+  static const double radiusMD = 6.0;
+  static const double radiusLG = 8.0;
+  static const double radiusXL = 12.0;
+  static const double radius2XL = 16.0;
+  static const double radius3XL = 24.0;
+  static const double radiusPILL = 9999.0;
 }

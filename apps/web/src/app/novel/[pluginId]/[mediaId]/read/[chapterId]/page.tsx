@@ -133,10 +133,10 @@ export default function NovelReaderPage({ params }: { params: Promise<Params> })
     { bg: string; text: string; card: string; border: string }
   > = {
     obsidian: {
-      bg: 'bg-slate-950',
-      text: 'text-slate-300',
-      card: 'bg-slate-900 border-slate-800',
-      border: 'border-slate-800',
+      bg: 'bg-background',
+      text: 'text-textSecondary',
+      card: 'bg-surface border-borderSubtle',
+      border: 'border-borderSubtle',
     },
     sepia: {
       bg: 'bg-[#FBF0D9]',
@@ -152,9 +152,9 @@ export default function NovelReaderPage({ params }: { params: Promise<Params> })
     },
     light: {
       bg: 'bg-white',
-      text: 'text-slate-800',
-      card: 'bg-slate-50 border-slate-200',
-      border: 'border-slate-200',
+      text: 'text-gray-800',
+      card: 'bg-gray-50 border-gray-200',
+      border: 'border-gray-200',
     },
   };
 
@@ -165,7 +165,7 @@ export default function NovelReaderPage({ params }: { params: Promise<Params> })
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-400">
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center text-textSecondary">
         <Loader2 className="h-10 w-10 text-violet-500 animate-spin mb-4" />
         <p className="text-sm tracking-wider">正在隔离沙箱中解析并抓取小说内容正文...</p>
       </div>
@@ -174,13 +174,13 @@ export default function NovelReaderPage({ params }: { params: Promise<Params> })
 
   if (error || paragraphs.length === 0) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 text-center">
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 text-center">
         <BookOpen className="h-16 w-16 text-rose-500 mb-4 animate-bounce" />
-        <h2 className="text-2xl font-bold text-slate-200 mb-2">加载阅读器失败</h2>
-        <p className="text-slate-400 max-w-md mb-6">{error || '抓取章节返回的小说正文为空。'}</p>
+        <h2 className="text-2xl font-bold text-textPrimary mb-2">加载阅读器失败</h2>
+        <p className="text-textSecondary max-w-md mb-6">{error || '抓取章节返回的小说正文为空。'}</p>
         <button
           onClick={() => router.back()}
-          className="flex items-center bg-slate-900 border border-slate-800 text-slate-300 px-6 py-2.5 rounded-xl hover:border-slate-700 active:scale-95 transition-all text-sm font-medium"
+          className="flex items-center bg-surface border border-borderSubtle text-textSecondary px-6 py-2.5 rounded-xl hover:border-border active:scale-95 transition-all text-sm font-medium"
         >
           <ArrowLeft className="h-4 w-4 mr-2" />
           返回详情页
@@ -203,20 +203,26 @@ export default function NovelReaderPage({ params }: { params: Promise<Params> })
 
       {/* Top Header bar */}
       <header
-        className={`z-40 fixed top-[3px] left-0 right-0 flex justify-between items-center ${theme === 'light' ? 'bg-white/80 border-slate-200' : 'bg-slate-950/80 border-slate-900'} backdrop-blur-md border-b px-6 py-4 transition-colors`}
+        className={`z-40 fixed top-[3px] left-0 right-0 flex justify-between items-center ${theme === 'light' ? 'bg-white/80 border-gray-200' : 'bg-background/80 border-borderSubtle'} backdrop-blur-md border-b px-6 py-4 transition-colors`}
       >
         <div className="flex items-center space-x-4">
           <button
             onClick={() => router.back()}
-            className={`transition-colors ${theme === 'light' ? 'text-slate-600 hover:text-slate-950' : 'text-slate-400 hover:text-white'}`}
+            className={`transition-colors ${theme === 'light' ? 'text-textTertiary hover:text-textPrimary' : 'text-textSecondary hover:text-white'}`}
           >
             <ArrowLeft className="h-5 w-5" />
           </button>
-          <div className={`h-4 w-[1px] ${theme === 'light' ? 'bg-slate-300' : 'bg-slate-800'}`} />
+          <div className={`h-4 w-[1px] ${theme === 'light' ? 'bg-gray-300' : 'bg-surfaceLight'}`} />
           <h1
-            className={`text-sm md:text-base font-semibold truncate max-w-[200px] md:max-w-sm ${theme === 'light' ? 'text-slate-800' : 'text-slate-200'}`}
+            className={`text-sm md:text-base font-semibold truncate max-w-[200px] md:max-w-sm ${theme === 'light' ? 'text-gray-800' : 'text-textPrimary'}`}
           >
-            {chapters.find((c) => c.id === chapterId)?.title || chapterId}
+            {(() => {
+              const ch = chapters.find((c) => c.id === chapterId);
+              if (ch?.title) return ch.title;
+              if (ch?.chapterNo) return `第 ${ch.chapterNo} 章`;
+              const idx = chapters.findIndex((c) => c.id === chapterId);
+              return idx >= 0 ? `第 ${idx + 1} 章` : '阅读中';
+            })()}
           </h1>
         </div>
 
@@ -224,7 +230,7 @@ export default function NovelReaderPage({ params }: { params: Promise<Params> })
           {/* Settings Panel Toggle */}
           <button
             onClick={() => setSettingsOpen(!settingsOpen)}
-            className={`p-2 border rounded-xl transition-all ${theme === 'light' ? 'bg-slate-100 border-slate-200 hover:border-slate-300 text-slate-600' : 'bg-slate-900 border-slate-800 hover:border-slate-700 text-slate-400'}`}
+            className={`p-2 border rounded-xl transition-all ${theme === 'light' ? 'bg-gray-100 border-gray-200 hover:border-gray-300 text-textTertiary' : 'bg-surface border-borderSubtle hover:border-border text-textSecondary'}`}
           >
             <Settings className="h-5 w-5" />
           </button>
@@ -232,7 +238,7 @@ export default function NovelReaderPage({ params }: { params: Promise<Params> })
           {/* Chapter sidebar toggler */}
           <button
             onClick={() => setSidebarOpen(true)}
-            className={`p-2 border rounded-xl transition-all ${theme === 'light' ? 'bg-slate-100 border-slate-200 hover:border-slate-300 text-slate-600' : 'bg-slate-900 border-slate-800 hover:border-slate-700 text-slate-400'}`}
+            className={`p-2 border rounded-xl transition-all ${theme === 'light' ? 'bg-gray-100 border-gray-200 hover:border-gray-300 text-textTertiary' : 'bg-surface border-borderSubtle hover:border-border text-textSecondary'}`}
           >
             <Menu className="h-5 w-5" />
           </button>
@@ -241,7 +247,7 @@ export default function NovelReaderPage({ params }: { params: Promise<Params> })
 
       {/* Settings popup panel */}
       {settingsOpen && (
-        <div className="fixed top-20 right-6 z-40 w-72 p-5 rounded-2xl shadow-2xl border backdrop-blur-md bg-slate-950/95 border-slate-800 text-slate-200 animate-fade-in">
+        <div className="fixed top-20 right-6 z-40 w-72 p-5 rounded-2xl shadow-2xl border backdrop-blur-md bg-background/95 border-borderSubtle text-textPrimary animate-fade-in">
           <h3 className="text-sm font-bold mb-4 flex items-center space-x-2">
             <Type className="h-4 w-4 text-violet-500" />
             <span>阅读偏好设置</span>
@@ -249,7 +255,7 @@ export default function NovelReaderPage({ params }: { params: Promise<Params> })
 
           {/* Themes list */}
           <div className="mb-4">
-            <div className="text-[10px] uppercase font-bold text-slate-500 tracking-wider mb-2">
+            <div className="text-[10px] uppercase font-bold text-textTertiary tracking-wider mb-2">
               背景背景
             </div>
             <div className="grid grid-cols-4 gap-2">
@@ -257,7 +263,7 @@ export default function NovelReaderPage({ params }: { params: Promise<Params> })
                 <button
                   key={t}
                   onClick={() => setTheme(t)}
-                  className={`h-8 rounded-lg border text-[10px] font-bold uppercase transition-all ${t === 'obsidian' ? 'bg-slate-950 text-slate-300 border-slate-800' : t === 'sepia' ? 'bg-[#FBF0D9] text-[#5F4625] border-[#E8CE9D]' : t === 'mint' ? 'bg-[#DFF0D8] text-[#2D5337] border-[#BCDDB3]' : 'bg-white text-slate-800 border-slate-300'} ${theme === t ? 'ring-2 ring-violet-500 ring-offset-2 ring-offset-slate-950' : ''}`}
+                  className={`h-8 rounded-lg border text-[10px] font-bold uppercase transition-all ${t === 'obsidian' ? 'bg-background text-textSecondary border-borderSubtle' : t === 'sepia' ? 'bg-[#FBF0D9] text-[#5F4625] border-[#E8CE9D]' : t === 'mint' ? 'bg-[#DFF0D8] text-[#2D5337] border-[#BCDDB3]' : 'bg-white text-gray-800 border-gray-300'} ${theme === t ? 'ring-2 ring-violet-500 ring-offset-2 ring-offset-background' : ''}`}
                 >
                   {t.substring(0, 3)}
                 </button>
@@ -267,20 +273,20 @@ export default function NovelReaderPage({ params }: { params: Promise<Params> })
 
           {/* Font Sizes */}
           <div className="mb-4">
-            <div className="text-[10px] uppercase font-bold text-slate-500 tracking-wider mb-2">
+            <div className="text-[10px] uppercase font-bold text-textTertiary tracking-wider mb-2">
               字体大小
             </div>
-            <div className="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-xl p-1 text-xs">
+            <div className="flex items-center justify-between bg-surface border border-borderSubtle rounded-xl p-1 text-xs">
               <button
                 onClick={() => setFontSize((s) => Math.max(12, s - 2))}
-                className="px-3 py-1 text-slate-400 hover:text-white font-bold"
+                className="px-3 py-1 text-textSecondary hover:text-white font-bold"
               >
                 A-
               </button>
               <span className="font-mono">{fontSize}px</span>
               <button
                 onClick={() => setFontSize((s) => Math.min(32, s + 2))}
-                className="px-3 py-1 text-slate-400 hover:text-white font-bold"
+                className="px-3 py-1 text-textSecondary hover:text-white font-bold"
               >
                 A+
               </button>
@@ -289,19 +295,19 @@ export default function NovelReaderPage({ params }: { params: Promise<Params> })
 
           {/* Font Families */}
           <div>
-            <div className="text-[10px] uppercase font-bold text-slate-500 tracking-wider mb-2">
+            <div className="text-[10px] uppercase font-bold text-textTertiary tracking-wider mb-2">
               字体样式
             </div>
             <div className="grid grid-cols-2 gap-2 text-xs">
               <button
                 onClick={() => setFontFamily('serif')}
-                className={`py-1.5 rounded-lg border text-center font-serif transition-all ${fontFamily === 'serif' ? 'bg-violet-600 border-violet-500 text-white' : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'}`}
+                className={`py-1.5 rounded-lg border text-center font-serif transition-all ${fontFamily === 'serif' ? 'bg-violet-600 border-violet-500 text-white' : 'bg-surface border-borderSubtle text-textSecondary hover:text-white'}`}
               >
                 宋体 / 衬线
               </button>
               <button
                 onClick={() => setFontFamily('sans')}
-                className={`py-1.5 rounded-lg border text-center font-sans transition-all ${fontFamily === 'sans' ? 'bg-violet-600 border-violet-500 text-white' : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'}`}
+                className={`py-1.5 rounded-lg border text-center font-sans transition-all ${fontFamily === 'sans' ? 'bg-violet-600 border-violet-500 text-white' : 'bg-surface border-borderSubtle text-textSecondary hover:text-white'}`}
               >
                 黑体 / 无衬线
               </button>
@@ -322,7 +328,7 @@ export default function NovelReaderPage({ params }: { params: Promise<Params> })
           {paragraphs.map((p, idx) => (
             <p
               key={idx}
-              className="animate-paragraph mb-6 text-justify text-slate-900/90 leading-loose indent-8"
+              className="animate-paragraph mb-6 text-justify text-gray-900/90 leading-loose indent-8"
               style={{
                 color: 'inherit',
                 lineHeight: 1.85,
@@ -343,7 +349,7 @@ export default function NovelReaderPage({ params }: { params: Promise<Params> })
             onClick={() => setSidebarOpen(false)}
           />
           {/* Sidebar container */}
-          <div className="relative w-80 bg-slate-900 border-l border-slate-800 h-full flex flex-col p-6 shadow-2xl animate-slide-in text-slate-200">
+          <div className="relative w-80 bg-surface border-l border-borderSubtle h-full flex flex-col p-6 shadow-2xl animate-slide-in text-textPrimary">
             <h3 className="text-base font-bold text-white mb-6 flex items-center space-x-2">
               <BookOpen className="h-5 w-5 text-violet-500" />
               <span>章节跳转</span>
@@ -357,7 +363,7 @@ export default function NovelReaderPage({ params }: { params: Promise<Params> })
                     setSidebarOpen(false);
                     router.push(`/novel/${pluginId}/${mediaId}/read/${ch.id}`);
                   }}
-                  className={`w-full text-left px-4 py-3 rounded-xl text-xs font-medium border transition-all ${ch.id === chapterId ? 'bg-violet-500/10 border-violet-500/30 text-violet-400 font-bold' : 'bg-slate-950 border-slate-950 hover:border-slate-800 text-slate-400 hover:text-slate-200'}`}
+                  className={`w-full text-left px-4 py-3 rounded-xl text-xs font-medium border transition-all ${ch.id === chapterId ? 'bg-violet-500/10 border-violet-500/30 text-violet-400 font-bold' : 'bg-background border-border hover:border-borderSubtle text-textSecondary hover:text-textPrimary'}`}
                 >
                   {ch.title}
                 </button>

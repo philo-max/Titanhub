@@ -80,7 +80,7 @@ export class PluginManager {
   ): Promise<SandboxResult<VideoSource[]>> {
     try {
       const sandbox = await this.getSandbox(pluginId);
-      return await sandbox.runMethod<VideoSource[]>('getVideoUrl', [chapterId]);
+      return await sandbox.runMethod<VideoSource[]>('getVideoUrl', [chapterId], 35000);
     } catch (e: any) {
       return { success: false, error: e.message || String(e) };
     }

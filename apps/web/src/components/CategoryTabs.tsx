@@ -5,6 +5,13 @@ import { mockCategories, Category } from '../lib/mockData';
 import { useHomeStore } from '../stores/homeStore';
 import { animateCategoryTabIndicator } from '../lib/animations';
 
+const CATEGORY_LABELS: Record<Category, string> = {
+  anime: '动漫',
+  manga: '漫画',
+  novel: '小说',
+  movie: '影视',
+};
+
 export default function CategoryTabs() {
   const activeCategory = useHomeStore((state) => state.activeCategory);
   const setActiveCategory = useHomeStore((state) => state.setActiveCategory);
@@ -20,12 +27,12 @@ export default function CategoryTabs() {
   }, [activeCategory]);
 
   return (
-    <div className="w-full flex justify-center py-10" ref={containerRef}>
-      <div className="relative flex items-center bg-surfaceLight border border-border p-1.5 rounded-full shadow-xl">
+    <div className="w-full flex justify-center py-8" ref={containerRef}>
+      <div className="relative flex items-center glass-surface border border-borderSubtle p-1.5 rounded-pill shadow-card">
         {/* Animated Background Indicator */}
         <div
           ref={indicatorRef}
-          className="absolute left-0 top-1.5 bottom-1.5 bg-gradient-to-r from-primary to-secondary rounded-full shadow-lg"
+          className="absolute left-0 top-1.5 bottom-1.5 bg-gradient-to-r from-primary to-secondary rounded-pill shadow-lg"
           style={{ willChange: 'transform, width' }}
         />
 
@@ -39,11 +46,11 @@ export default function CategoryTabs() {
                 tabsRef.current[index] = el;
               }}
               onClick={() => setActiveCategory(category)}
-              className={`relative z-10 px-6 py-2.5 sm:px-8 sm:py-3 rounded-full text-sm sm:text-base font-bold capitalize transition-colors duration-300 ${
+              className={`relative z-10 px-5 py-2 sm:px-7 sm:py-2.5 rounded-pill text-sm font-medium transition-colors duration-normal ease-out ${
                 isActive ? 'text-white drop-shadow-md' : 'text-textSecondary hover:text-textPrimary'
               }`}
             >
-              {category}
+              {CATEGORY_LABELS[category]}
             </button>
           );
         })}

@@ -2,6 +2,7 @@
 
 import React, { use, useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
+import SmartImage from '@/components/SmartImage';
 import { useRouter } from 'next/navigation';
 import {
   animateDetailPageEntrance,
@@ -186,7 +187,7 @@ export default function MangaDetailPage({ params }: { params: Promise<Params> })
           {/* Cover poster image */}
           <div className="animate-scale-in w-48 h-64 rounded-2xl overflow-hidden relative border border-border shadow-2xl shadow-black/80 flex-shrink-0 mx-auto md:mx-0">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={detail.cover} alt={detail.title} className="w-full h-full object-cover" />
+            <SmartImage src={detail.cover} alt={detail.title} width={256} height={352} className="w-full h-full object-cover" />
           </div>
 
           {/* Details Metadata */}

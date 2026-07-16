@@ -176,7 +176,8 @@ export default function AnimePlayPage({ params }: { params: Promise<Params> }) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center text-textPrimary">
         <Loader2 className="h-10 w-10 text-primary animate-spin mb-4" />
-        <p className="text-sm text-textSecondary">正在与沙箱引擎安全交换视频流与弹幕通道...</p>
+        <p className="text-sm text-textSecondary">正在解析播放源...</p>
+        <p className="text-xs text-textTertiary mt-2">首次解析约需 10-15 秒，已缓存的视频秒开</p>
       </div>
     );
   }

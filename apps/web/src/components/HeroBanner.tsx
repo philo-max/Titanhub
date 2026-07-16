@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import SmartImage from './SmartImage';
 import { animateParallaxScroll } from '../lib/animations';
 import { API_BASE } from '../lib/config';
 import { AggregatedMediaItem } from '@titanhub/plugin-types';
@@ -49,21 +50,27 @@ export default function HeroBanner() {
   return (
     <div
       ref={containerRef}
-      className="relative h-[65vh] min-h-[500px] w-full overflow-hidden rounded-b-[2.5rem] sm:rounded-b-[4rem] shadow-2xl bg-background"
+      className="relative h-[65vh] min-h-[500px] w-full overflow-hidden rounded-b-3xl sm:rounded-b-[4rem] shadow-dialog bg-background"
     >
       {/* Background */}
       <div ref={bgRef} className="absolute inset-0 origin-top">
         {featured?.cover ? (
-          <img
+          <SmartImage
             src={featured.cover}
             alt={featured.title}
-            className="absolute inset-0 w-full h-full object-cover scale-110 blur-sm"
+            fill
+            priority
+            sizes="100vw"
+            className="object-cover scale-110 blur-sm"
           />
         ) : (
-          <img
+          <SmartImage
             src="/images/hero.png"
             alt="Hero Background"
-            className="absolute inset-0 w-full h-full object-cover"
+            fill
+            priority
+            sizes="100vw"
+            className="object-cover"
           />
         )}
       </div>
@@ -78,15 +85,15 @@ export default function HeroBanner() {
           {featured ? (
             <>
               {featured.mediaType && (
-                <span className="inline-block text-xs font-bold tracking-widest uppercase px-3 py-1 rounded-full bg-primary/20 border border-primary/30 text-primary">
+                <span className="pill-badge inline-block bg-primary/15 border border-primary/25 text-primary">
                   {TYPE_LABELS[featured.mediaType] || featured.mediaType} · {featured.pluginName}
                 </span>
               )}
-              <h1 className="text-4xl sm:text-6xl font-extrabold text-white tracking-tight leading-tight drop-shadow-xl line-clamp-2">
+              <h1 className="text-4xl sm:text-6xl font-bold text-white tracking-tight leading-tight drop-shadow-xl line-clamp-2" style={{ letterSpacing: '-0.025em' }}>
                 {featured.title}
               </h1>
               {featured.description && (
-                <p className="text-base sm:text-lg text-textSecondary font-medium drop-shadow-md max-w-2xl leading-relaxed line-clamp-3">
+                <p className="text-base sm:text-lg text-textSecondary drop-shadow-md max-w-2xl leading-relaxed line-clamp-3">
                   {featured.description}
                 </p>
               )}
@@ -94,14 +101,14 @@ export default function HeroBanner() {
                 {detailHref && (
                   <Link
                     href={detailHref}
-                    className="px-8 py-4 bg-white text-black font-bold rounded-full hover:bg-gray-200 transition-transform hover:scale-105 active:scale-95 shadow-[0_0_20px_rgba(255,255,255,0.3)]"
+                    className="px-8 py-3.5 bg-white text-black font-semibold rounded-pill hover:bg-white/90 transition-all duration-normal ease-out hover:scale-105 active:scale-95 shadow-card"
                   >
                     立即观看
                   </Link>
                 )}
                 <Link
                   href="/search"
-                  className="px-8 py-4 bg-white/5 backdrop-blur-xl text-white font-bold rounded-full border border-white/10 hover:bg-white/10 transition-colors"
+                  className="px-8 py-3.5 glass-surface text-white font-semibold rounded-pill border border-white/10 hover:bg-white/10 transition-colors duration-normal ease-out"
                 >
                   探索更多
                 </Link>
@@ -109,19 +116,19 @@ export default function HeroBanner() {
             </>
           ) : (
             <>
-              <h1 className="text-5xl sm:text-7xl font-extrabold text-white tracking-tight leading-tight drop-shadow-xl">
+              <h1 className="text-5xl sm:text-7xl font-bold text-white leading-tight drop-shadow-xl" style={{ letterSpacing: '-0.035em' }}>
                 One App, <br />
                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-accent to-secondary">
                   All ACG Content.
                 </span>
               </h1>
-              <p className="text-lg sm:text-2xl text-textSecondary font-medium drop-shadow-md max-w-2xl leading-relaxed">
+              <p className="text-lg sm:text-2xl text-textSecondary drop-shadow-md max-w-2xl leading-relaxed">
                 Experience the ultimate aggregator for Anime, Manga, Light Novels, and Movies.
               </p>
               <div className="pt-6 flex flex-wrap gap-4">
                 <Link
                   href="/search"
-                  className="px-8 py-4 bg-white text-black font-bold rounded-full hover:bg-gray-200 transition-transform hover:scale-105 active:scale-95 shadow-[0_0_20px_rgba(255,255,255,0.3)]"
+                  className="px-8 py-3.5 bg-white text-black font-semibold rounded-pill hover:bg-white/90 transition-all duration-normal ease-out hover:scale-105 active:scale-95 shadow-card"
                 >
                   Start Exploring
                 </Link>

@@ -35,13 +35,13 @@ export default function SettingsPage() {
           <span className="text-sm font-medium">返回发现</span>
         </Link>
 
-        <h1 className="text-2xl font-extrabold tracking-tight mb-8 flex items-center">
+        <h1 className="text-2xl font-semibold tracking-tight mb-8 flex items-center" style={{ letterSpacing: '-0.025em' }}>
           <SettingsIcon className="h-6 w-6 text-primary mr-3" />
           设置
         </h1>
 
-        <section className="rounded-2xl bg-surface border border-border p-6 mb-6">
-          <h2 className="text-sm font-bold text-textSecondary uppercase tracking-wider mb-4 flex items-center">
+        <section className="rounded-xl bg-surface border border-borderSubtle p-6 mb-4 shadow-card">
+          <h2 className="text-xs font-medium text-textTertiary uppercase tracking-wider mb-4 flex items-center">
             <UserIcon className="h-4 w-4 mr-2" />
             账号
           </h2>

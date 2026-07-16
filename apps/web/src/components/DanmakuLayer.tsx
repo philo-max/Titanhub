@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { animateDanmakuTravel, DanmakuTween } from '../lib/animations';
 
 export interface DanmakuComment {
@@ -28,6 +28,10 @@ export default function DanmakuLayer({
   const activeTweensRef = useRef<DanmakuTween[]>([]);
   const lanesCount = 8; // Number of horizontal lanes
   const nextLaneRef = useRef(0);
+  const isPlayingRef = useRef(isPlaying);
+  useEffect(() => {
+    isPlayingRef.current = isPlaying;
+  }, [isPlaying]);
 
   // If user seeks backward, reset the shown set
   const prevTimeRef = useRef(currentTime);
@@ -62,22 +66,7 @@ export default function DanmakuLayer({
     };
   }, []);
 
-  // Trigger comments when currentTime updates
-  useEffect(() => {
-    if (!danmakuEnabled || !containerRef.current) return;
-
-    // Find comments within the current window: [currentTime - 0.5, currentTime]
-    const pendingComments = comments.filter(
-      (c) => c.time >= currentTime - 0.5 && c.time <= currentTime && !shownIdsRef.current.has(c.id)
-    );
-
-    pendingComments.forEach((comment) => {
-      shownIdsRef.current.add(comment.id);
-      shootDanmaku(comment);
-    });
-  }, [currentTime, comments, danmakuEnabled]);
-
-  const shootDanmaku = (comment: DanmakuComment) => {
+  const shootDanmaku = useCallback((comment: DanmakuComment) => {
     const container = containerRef.current;
     if (!container) return;
 
@@ -114,7 +103,7 @@ export default function DanmakuLayer({
       el,
       containerWidth + elWidth + 50,
       duration,
-      !isPlaying,
+      !isPlayingRef.current,
       () => {
         // Remove element from DOM
         el.remove();
@@ -124,7 +113,21 @@ export default function DanmakuLayer({
     );
 
     activeTweensRef.current.push(tween);
-  };
+  }, []);
+
+  // Trigger comments when currentTime updates
+  useEffect(() => {
+    if (!danmakuEnabled || !containerRef.current) return;
+
+    const pendingComments = comments.filter(
+      (c) => c.time >= currentTime - 0.5 && c.time <= currentTime && !shownIdsRef.current.has(c.id)
+    );
+
+    pendingComments.forEach((comment) => {
+      shownIdsRef.current.add(comment.id);
+      shootDanmaku(comment);
+    });
+  }, [currentTime, comments, danmakuEnabled, shootDanmaku]);
 
   return (
     <div

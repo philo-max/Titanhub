@@ -6,6 +6,8 @@ import 'package:lucide_icons/lucide_icons.dart';
 import '../../media/providers/media_providers.dart';
 import '../../tracking/sync_provider.dart';
 import '../../tracking/auth_dialog.dart';
+import '../../../core/network/api_client.dart';
+import '../../../core/theme/app_theme.dart';
 
 class SearchScreen extends ConsumerStatefulWidget {
   const SearchScreen({super.key});
@@ -24,6 +26,84 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     });
   }
 
+  void _showServerConfigDialog() {
+    final currentUrl = ref.read(serverUrlProvider);
+    final textController = TextEditingController(text: currentUrl);
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF1F2937),
+          title: const Row(
+            children: [
+              Icon(Icons.dns, color: Colors.violetAccent),
+              SizedBox(width: 8),
+              Text(
+                '配置服务器 URL',
+                style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                '请输入后端 API 服务器的完整 HTTP 地址。如果是本地开发服务器，确保手机与电脑在同一局域网下，并使用电脑的局域网 IP (如 http://192.168.x.x:3001)。',
+                style: TextStyle(color: Colors.slate, fontSize: 13),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: textController,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(
+                  labelText: '服务器 URL',
+                  labelStyle: TextStyle(color: Colors.slate),
+                  enabledBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: Colors.slate),
+                  ),
+                  focusedBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: Colors.violetAccent),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('取消', style: TextStyle(color: Colors.slate)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.violetAccent,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () async {
+                final newUrl = textController.text.trim();
+                if (newUrl.isNotEmpty) {
+                  await ref.read(serverUrlProvider.notifier).updateUrl(newUrl);
+                  if (context.mounted) {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('服务器 URL 已更新为: $newUrl'),
+                        backgroundColor: Colors.violetAccent,
+                      ),
+                    );
+                    ref.invalidate(pluginsListProvider);
+                  }
+                }
+              },
+              child: const Text('保存'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -36,7 +116,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     final backendStatus = ref.watch(pluginsListProvider);
 
     return Scaffold(
-      backgroundColor: const Color(0xFF030712), // Slate 950
+      backgroundColor: AppTheme.background,
       appBar: AppBar(
         title: const Row(
           children: [
@@ -71,35 +151,38 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               );
             },
           ),
-          Container(
-            margin: const EdgeInsets.only(right: 16, top: 12, bottom: 12),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1E293B),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0xFF334155)),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.circle, color: Colors.emerald, size: 8),
-                const SizedBox(width: 6),
-                backendStatus.when(
-                  data: (list) => Text(
-                    'Online (${list.length})',
-                    style: const TextStyle(fontSize: 11, color: Colors.slate),
+          GestureDetector(
+            onTap: _showServerConfigDialog,
+            child: Container(
+              margin: const EdgeInsets.only(right: 16, top: 12, bottom: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppTheme.surfaceLight,
+                borderRadius: BorderRadius.circular(AppTheme.radius2XL),
+                border: Border.all(color: AppTheme.surfaceElevated),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.circle, color: Colors.emerald, size: 8),
+                  const SizedBox(width: 6),
+                  backendStatus.when(
+                    data: (list) => Text(
+                      'Online (${list.length})',
+                      style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                    ),
+                    error: (_, __) => const Text(
+                      'Offline',
+                      style: TextStyle(fontSize: 11, color: Colors.roseAccent),
+                    ),
+                    loading: () => const SizedBox(
+                      width: 10,
+                      height: 10,
+                      child: CircularProgressIndicator(strokeWidth: 1.5),
+                    ),
                   ),
-                  error: (_, __) => const Text(
-                    'Offline',
-                    style: TextStyle(fontSize: 11, color: Colors.roseAccent),
-                  ),
-                  loading: () => const SizedBox(
-                    width: 10,
-                    height: 10,
-                    child: CircularProgressIndicator(strokeWidth: 1.5),
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ],
@@ -136,30 +219,30 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                   // Search Bar
                   Container(
                     decoration: BoxDecoration(
-                      color: const Color(0xFF0F172A), // Slate 900
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: const Color(0xFF1E293B)),
+                      color: AppTheme.surface,
+                      borderRadius: BorderRadius.circular(AppTheme.radius2XL),
+                      border: Border.all(color: AppTheme.surfaceLight),
                     ),
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                     child: Row(
                       children: [
-                        const Icon(LucideIcons.search, color: Colors.slate, size: 20),
+                        const Icon(LucideIcons.search, color: AppTheme.textTertiary, size: 20),
                         const SizedBox(width: 12),
                         Expanded(
                           child: TextField(
                             controller: _searchController,
                             onSubmitted: (_) => _performSearch(),
-                            style: const TextStyle(color: Colors.white),
+                            style: const TextStyle(color: AppTheme.textPrimary),
                             decoration: const InputDecoration(
                               hintText: '搜索动漫、漫画、轻小说...',
-                              hintStyle: TextStyle(color: Colors.slate),
+                              hintStyle: TextStyle(color: AppTheme.textTertiary),
                               border: InputBorder.none,
                               isDense: true,
                             ),
                           ),
                         ),
                         IconButton(
-                          icon: const Icon(LucideIcons.arrowRight, color: Colors.violetAccent),
+                          icon: const Icon(LucideIcons.arrowRight, color: AppTheme.primary),
                           onPressed: _performSearch,
                         ),
                       ],
@@ -197,9 +280,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                         return Container(
                           margin: const EdgeInsets.only(bottom: 16),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF0B0F19), // Slate 950 mix
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: const Color(0xFF1E293B)),
+                            color: AppTheme.surface,
+                            borderRadius: BorderRadius.circular(AppTheme.radius2XL),
+                            border: Border.all(color: AppTheme.surfaceLight),
                           ),
                           child: InkWell(
                             borderRadius: BorderRadius.circular(16),
@@ -220,14 +303,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                     height: 135,
                                     fit: BoxFit.cover,
                                     placeholder: (context, url) => Container(
-                                      color: const Color(0xFF1E293B),
+                                      color: AppTheme.surfaceLight,
                                       child: const Center(
                                         child: CircularProgressIndicator(strokeWidth: 2),
                                       ),
                                     ),
                                     errorWidget: (context, url, error) => Container(
-                                      color: const Color(0xFF1E293B),
-                                      child: const Icon(Icons.broken_image, color: Colors.slate),
+                                      color: AppTheme.surfaceLight,
+                                      child: const Icon(Icons.broken_image, color: AppTheme.textSecondary),
                                     ),
                                   ),
                                 ),
@@ -251,7 +334,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                                 style: const TextStyle(
                                                   fontWeight: FontWeight.bold,
                                                   fontSize: 16,
-                                                  color: Colors.white,
+                                                  color: AppTheme.textPrimary,
                                                 ),
                                               ),
                                               const SizedBox(height: 6),
@@ -261,7 +344,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                                 overflow: TextOverflow.ellipsis,
                                                 style: const TextStyle(
                                                   fontSize: 12,
-                                                  color: Colors.slate,
+                                                  color: AppTheme.textSecondary,
                                                 ),
                                               ),
                                             ],
@@ -271,22 +354,22 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                                             children: [
                                               Text(
                                                 'ID: ${item.id}',
-                                                style: const TextStyle(fontSize: 10, color: Colors.slate),
+                                                style: const TextStyle(fontSize: 10, color: AppTheme.textTertiary),
                                               ),
                                               Container(
                                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                                 decoration: BoxDecoration(
-                                                  color: const Color(0xFF8B5CF6).withOpacity(0.1),
-                                                  borderRadius: BorderRadius.circular(6),
+                                                  color: AppTheme.primary.withOpacity(0.1),
+                                                  borderRadius: BorderRadius.circular(AppTheme.radiusMD),
                                                   border: Border.all(
-                                                    color: const Color(0xFF8B5CF6).withOpacity(0.3),
+                                                    color: AppTheme.primary.withOpacity(0.3),
                                                   ),
                                                 ),
                                                 child: Text(
                                                   item.pluginName ?? '未知源',
                                                   style: const TextStyle(
                                                     fontSize: 9,
-                                                    color: Color(0xFFA78BFA),
+                                                    color: AppTheme.primaryHover,
                                                     fontWeight: FontWeight.bold,
                                                   ),
                                                 ),

@@ -27,6 +27,7 @@ function SearchPageInner() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [searched, setSearched] = useState(false);
+  const [searchProgress, setSearchProgress] = useState({ done: 0, total: 0 });
 
   useEffect(() => {
     setKeyword(q);
@@ -40,21 +41,54 @@ function SearchPageInner() {
     const run = async () => {
       setLoading(true);
       setError('');
+      setItems([]);
+      setSearchProgress({ done: 0, total: 0 });
       try {
-        const url = `${API_BASE}/api/aggregate/search?q=${encodeURIComponent(q)}${
-          type ? `&type=${type}` : ''
-        }`;
-        const res = await fetch(url);
-        const data = await res.json();
-        if (data.error) throw new Error(data.error);
+        // Fetch plugin list first to know how many sources to search
+        const pluginsRes = await fetch(`${API_BASE}/api/plugins`);
+        const pluginsData = await pluginsRes.json();
+        const eligiblePlugins = (pluginsData.plugins || []).filter(
+          (p: any) => p.isActive && (!type || p.types.includes(type))
+        );
+        setSearchProgress({ done: 0, total: eligiblePlugins.length });
+
+        // Parallel search: fire all requests at once, render as each completes
+        let completed = 0;
+        await Promise.all(
+          eligiblePlugins.map(async (plugin: any) => {
+            try {
+              const res = await fetch(
+                `${API_BASE}/api/plugins/${plugin.id}/search?q=${encodeURIComponent(q)}`
+              );
+              const data = await res.json();
+              const pluginItems: AggregatedMediaItem[] = (data.items || data || []).map(
+                (item: any) => ({
+                  ...item,
+                  pluginId: plugin.id,
+                  pluginName: plugin.name,
+                  mediaType: type || plugin.types[0],
+                  providesVideo: !/providesVideo\s*:\s*false/.test(plugin.code || ''),
+                })
+              );
+              if (!cancelled && pluginItems.length > 0) {
+                setItems((prev) => [...prev, ...pluginItems]);
+              }
+            } catch {
+              // Individual plugin failure is non-fatal
+            } finally {
+              completed++;
+              if (!cancelled) setSearchProgress({ done: completed, total: eligiblePlugins.length });
+            }
+          })
+        );
         if (!cancelled) {
-          setItems(data.items || []);
           setSearched(true);
         }
-      } catch (err: any) {
-        if (!cancelled) setError(err.message || '搜索失败，请检查后端运行状态。');
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          setSearchProgress({ done: 0, total: 0 });
+        }
       }
     };
     run();
@@ -89,20 +123,20 @@ function SearchPageInner() {
 
         <form
           onSubmit={handleSubmit}
-          className="flex items-center bg-surface border border-border rounded-2xl p-2 shadow-xl max-w-2xl"
+          className="flex items-center glass-surface border border-borderSubtle rounded-pill p-1.5 shadow-card max-w-2xl"
         >
-          <Search className="h-5 w-5 text-textSecondary ml-3 shrink-0" />
+          <Search className="h-5 w-5 text-textTertiary ml-4 shrink-0" />
           <input
             type="text"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             placeholder="搜索番剧、漫画、小说、影视..."
             autoFocus
-            className="flex-grow bg-transparent border-0 outline-none text-sm text-textPrimary px-3 py-2 placeholder-textSecondary"
+            className="flex-grow bg-transparent border-0 outline-none text-sm text-textPrimary px-3 py-2 placeholder-textTertiary"
           />
           <button
             type="submit"
-            className="px-5 py-2.5 bg-primary hover:bg-primary/90 text-white text-sm font-bold rounded-xl transition active:scale-95 cursor-pointer"
+            className="px-5 py-2.5 bg-primary hover:bg-primaryHover text-white text-sm font-semibold rounded-pill transition-all duration-normal ease-out active:scale-95 cursor-pointer"
           >
             搜索
           </button>
@@ -115,9 +149,9 @@ function SearchPageInner() {
               <button
                 key={tab.label}
                 onClick={() => (q ? navigate(q, tab.value) : undefined)}
-                className={`text-xs px-4 py-2 rounded-full border font-semibold transition-all cursor-pointer ${
+                className={`text-xs px-4 py-2 rounded-pill border font-medium transition-all duration-normal ease-out cursor-pointer ${
                   isActive
-                    ? 'bg-primary border-primary text-white shadow-lg shadow-primary/25'
+                    ? 'bg-primary border-primary text-white shadow-card'
                     : 'bg-surface border-border text-textSecondary hover:text-textPrimary hover:border-surfaceLight'
                 }`}
               >
@@ -128,10 +162,21 @@ function SearchPageInner() {
         </div>
 
         <div className="mt-10">
-          {loading && (
+          {loading && items.length === 0 && (
             <div className="flex flex-col items-center justify-center py-20 text-textSecondary">
               <Loader2 className="h-8 w-8 text-primary animate-spin mb-3" />
-              <p className="text-sm">正在跨插件聚合搜索「{q}」...</p>
+              <p className="text-sm">正在搜索「{q}」...</p>
+              {searchProgress.total > 0 && (
+                <p className="text-xs text-textTertiary mt-2">
+                  已查询 {searchProgress.done}/{searchProgress.total} 个源
+                </p>
+              )}
+            </div>
+          )}
+          {loading && items.length > 0 && (
+            <div className="flex items-center gap-2 mb-4 text-xs text-textTertiary">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              <span>已查询 {searchProgress.done}/{searchProgress.total} 个源，{items.length} 条结果（加载中...）</span>
             </div>
           )}
 
@@ -148,7 +193,9 @@ function SearchPageInner() {
             </div>
           )}
 
-          {!loading && !error && items.length > 0 && (
+          {items.length > 0 && !error && (
+
+
             <>
               <p className="text-xs text-textSecondary mb-4">
                 共 {items.length} 条结果，来自已启用的资源插件
@@ -159,7 +206,7 @@ function SearchPageInner() {
                     key={`${item.pluginId}-${item.id}`}
                     href={`/${item.mediaType}/${item.pluginId}/${item.id}`}
                   >
-                    <MediaCard item={item} originBadge={item.pluginName} />
+                    <MediaCard item={item} originBadge={item.pluginName} isInfoSource={item.providesVideo === false} />
                   </Link>
                 ))}
               </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Play,
   Pause,
@@ -342,24 +342,29 @@ export default function VideoPlayer({
   };
 
   // Hover animations for controls using GSAP
-  const showControls = () => {
+  const isPlayingRef = useRef(isPlaying);
+  useEffect(() => {
+    isPlayingRef.current = isPlaying;
+  }, [isPlaying]);
+
+  const showControls = useCallback(() => {
     if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
 
     animateControlsVisibility(controlsRef.current, true);
 
-    if (isPlaying) {
+    if (isPlayingRef.current) {
       controlsTimeoutRef.current = setTimeout(() => {
         animateControlsVisibility(controlsRef.current, false);
       }, 3000);
     }
-  };
+  }, []);
 
   useEffect(() => {
     showControls();
     return () => {
       if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
     };
-  }, [isPlaying]);
+  }, [isPlaying, showControls]);
 
   return (
     <div
@@ -437,8 +442,8 @@ export default function VideoPlayer({
             </button>
 
             {/* Time display */}
-            <span className="text-xs font-semibold text-slate-300">
-              {formatTime(currentTime)} <span className="text-slate-600">/</span>{' '}
+            <span className="text-xs font-semibold text-textSecondary">
+              {formatTime(currentTime)} <span className="text-textTertiary">/</span>{' '}
               {formatTime(duration)}
             </span>
 
@@ -446,7 +451,7 @@ export default function VideoPlayer({
             <div className="flex items-center space-x-2">
               <button
                 onClick={toggleMute}
-                className="p-2 text-slate-400 hover:text-slate-200 transition cursor-pointer"
+                className="p-2 text-textTertiary hover:text-textPrimary transition cursor-pointer"
               >
                 {isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
               </button>
@@ -464,7 +469,7 @@ export default function VideoPlayer({
 
           {/* Right Buttons: Title, Quality Selector, Speed Selector, Danmaku toggle, Fullscreen */}
           <div className="flex items-center space-x-3 justify-end relative">
-            <span className="text-xs text-slate-400 font-medium max-w-32 truncate hidden lg:inline mr-2">
+            <span className="text-xs text-textTertiary font-medium max-w-32 truncate hidden lg:inline mr-2">
               {title}
             </span>
 
@@ -486,7 +491,7 @@ export default function VideoPlayer({
                     setShowQualityMenu(!showQualityMenu);
                     setShowSpeedMenu(false);
                   }}
-                  className="px-3 py-2 text-xs font-bold bg-white/5 border border-white/5 text-slate-300 hover:text-white rounded-xl hover:bg-white/10 transition cursor-pointer"
+                  className="px-3 py-2 text-xs font-bold bg-white/5 border border-white/5 text-textSecondary hover:text-white rounded-xl hover:bg-white/10 transition cursor-pointer"
                 >
                   {activeSource?.quality || '清晰度'}
                 </button>
@@ -516,7 +521,7 @@ export default function VideoPlayer({
                   setShowSpeedMenu(!showSpeedMenu);
                   setShowQualityMenu(false);
                 }}
-                className="px-3 py-2 text-xs font-bold bg-white/5 border border-white/5 text-slate-300 hover:text-white rounded-xl hover:bg-white/10 transition cursor-pointer"
+                className="px-3 py-2 text-xs font-bold bg-white/5 border border-white/5 text-textSecondary hover:text-white rounded-xl hover:bg-white/10 transition cursor-pointer"
               >
                 {playbackSpeed === 1 ? '倍速' : `${playbackSpeed}x`}
               </button>
@@ -552,7 +557,7 @@ export default function VideoPlayer({
             {/* Fullscreen */}
             <button
               onClick={toggleFullscreen}
-              className="p-2 rounded-xl bg-white/5 text-slate-400 hover:text-slate-200 transition cursor-pointer active:scale-95"
+              className="p-2 rounded-xl bg-white/5 text-textTertiary hover:text-textPrimary transition cursor-pointer active:scale-95"
             >
               {isFullscreen ? <Minimize className="h-5 w-5" /> : <Maximize className="h-5 w-5" />}
             </button>

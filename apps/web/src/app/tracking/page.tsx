@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
+import SmartImage from '@/components/SmartImage';
 import { ArrowLeft, Heart, History, Loader2, PlayCircle } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { useSyncStore, TrackingLog } from '@/stores/syncStore';
@@ -54,15 +55,17 @@ export default function TrackingPage() {
     }
 
     pairs.forEach(({ pluginId, mediaId }, key) => {
-      if (details[key]) return;
       fetch(`${API_BASE}/api/plugins/${pluginId}/detail/${mediaId}`)
         .then((r) => r.json())
         .then((data) => {
           if (data.detail) {
-            setDetails((prev) => ({
-              ...prev,
-              [key]: { title: data.detail.title, cover: data.detail.cover },
-            }));
+            setDetails((prev) => {
+              if (prev[key]) return prev; // Already fetched, skip update
+              return {
+                ...prev,
+                [key]: { title: data.detail.title, cover: data.detail.cover },
+              };
+            });
           }
         })
         .catch(() => {});
@@ -127,7 +130,7 @@ export default function TrackingPage() {
                   <div className="h-20 w-14 rounded-lg overflow-hidden bg-surfaceLight flex-shrink-0">
                     {info?.cover && (
                       /* eslint-disable-next-line @next/next/no-img-element */
-                      <img src={info.cover} alt="" className="h-full w-full object-cover" />
+                      <SmartImage src={info.cover || ''} alt="" fill sizes="48px" className="object-cover" />
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -172,11 +175,12 @@ export default function TrackingPage() {
                 >
                   <div className="aspect-[2/3] rounded-xl overflow-hidden bg-surface border border-border group-hover:border-primary/40 transition">
                     {info?.cover && (
-                      /* eslint-disable-next-line @next/next/no-img-element */
-                      <img
+                      <SmartImage
                         src={info.cover}
                         alt=""
-                        className="h-full w-full object-cover group-hover:scale-105 transition duration-500"
+                        fill
+                        sizes="96px"
+                        className="object-cover group-hover:scale-105 transition duration-500"
                       />
                     )}
                   </div>

@@ -38,3 +38,11 @@ references/
 # Local database caches / backups
 db.json
 .claude/
+
+# Temporary test logs and browser profiles
+*.log
+*profile/
+agent-browser.json
+500_error.html
+edge-profile-test/
+
