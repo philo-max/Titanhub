@@ -41,7 +41,7 @@ jobs:
         run: pnpm --filter titanhub-server test
 
       - name: Run Web Build (Typecheck)
-        run: pnpm --filter titanhub-web build
+        run: pnpm build
 
   build-android:
     name: Build Android APK
