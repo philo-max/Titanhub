@@ -35,7 +35,7 @@ jobs:
         run: pnpm run lint
 
       - name: Install Playwright Browsers
-        run: npx playwright install --with-deps chromium
+        run: pnpm --filter titanhub-server exec playwright install --with-deps chromium
 
       - name: Run Backend Tests
         run: pnpm --filter titanhub-server test
