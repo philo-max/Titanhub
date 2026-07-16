@@ -33,7 +33,7 @@ dependencies:
   # UI / Helpers
   cached_network_image: ^3.3.1
   flutter_hooks: ^0.21.0
-  lucide_icons: ^0.320.0
+  lucide_icons: ^0.257.0
 
 dev_dependencies:
   flutter_test:
