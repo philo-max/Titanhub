@@ -59,7 +59,7 @@ Web 端内容卡片实现了 144Hz 锁帧的 GPU 加速 3D 悬停倾斜效果（
 
 ## 📥 客户端下载与使用指南 (v1.0.0)
 
-本项目已配置 **GitHub Actions** 自动化编译打包管线，您可以通过 **GitHub Releases** 下载对应平台编译好的本地程序：
+本项目已配置 **GitHub Actions** 自动化编译打包管线，您可以通过 [GitHub Releases (v1.0.0)](https://github.com/philo-max/Titanhub/releases/tag/v1.0.0) 下载对应平台编译好的本地程序：
 
 *   **Android 端 (APK)**：支持主流 Android 手机，提供不同架构（arm64-v8a, armeabi-v7a）的 release APK。
 *   **Windows 桌面端 (EXE)**：下载解压 ZIP 包后，双击直接运行。
