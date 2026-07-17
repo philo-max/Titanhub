@@ -93,6 +93,7 @@ jobs:
           # Limit Gradle memory to prevent OOM kills on CI runner
           echo "org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m" >> android/gradle.properties
           echo "kotlin.incremental=false" >> android/gradle.properties
+          echo "org.gradle.daemon=false" >> android/gradle.properties
 
           flutter pub get
           flutter pub run flutter_launcher_icons -f flutter_launcher_icons_android.yaml
@@ -101,7 +102,7 @@ jobs:
       - name: Build APK
         run: |
           cd apps/mobile
-          flutter build apk --release --no-daemon
+          flutter build apk --release
 
       - name: Rename APKs
         run: |
