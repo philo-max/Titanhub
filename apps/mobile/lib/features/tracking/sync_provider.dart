@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 import '../../core/network/api_client.dart';
 import '../../core/storage/app_database.dart';
+import 'package:drift/drift.dart';
 
 // Global Drift Database Provider
 final databaseProvider = Provider<AppDatabase>((ref) {
