@@ -50,7 +50,7 @@ class DetailScreen extends ConsumerWidget {
                       if (isFav) {
                         await db.deleteFavorite(mediaId);
                       } else {
-                        await db.saveFavorite(LocalFavoriteCompanion(
+                        await db.saveFavorite(LocalFavoritesCompanion(
                           id: Value(DateTime.now().millisecondsSinceEpoch.toString()),
                           mediaId: Value(mediaId),
                           pluginId: Value(pluginId),

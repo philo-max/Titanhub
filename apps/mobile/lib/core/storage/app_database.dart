@@ -58,7 +58,7 @@ class AppDatabase extends _$AppDatabase {
   Future<LocalFavorite?> getFavorite(String mediaId) {
     return (select(localFavorites)..where((f) => f.mediaId.equals(mediaId))).getSingleOrNull();
   }
-  Future<int> saveFavorite(LocalFavoriteCompanion entity) {
+  Future<int> saveFavorite(LocalFavoritesCompanion entity) {
     return into(localFavorites).insertOnConflictUpdate(entity);
   }
   Future<int> deleteFavorite(String mediaId) {
