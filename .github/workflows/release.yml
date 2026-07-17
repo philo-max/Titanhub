@@ -81,10 +81,10 @@ jobs:
                           }
                       }
                   }
-              }
-              tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
-                  kotlinOptions {
-                      jvmTarget = '11'
+                  project.tasks.matching { it.class.name.contains("KotlinCompile") }.configureEach {
+                      kotlinOptions {
+                          jvmTarget = "11"
+                      }
                   }
               }
           }
