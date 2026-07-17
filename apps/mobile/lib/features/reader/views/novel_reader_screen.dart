@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_theme.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -68,10 +69,10 @@ class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen> {
   // Theme styling configurations map
   Map<NovelTheme, _ThemeConfig> get _themeConfigs => {
         NovelTheme.obsidian: const _ThemeConfig(
-          bg: Color(0xFF030712), // Slate 950
+          bg: AppTheme.background, // Slate 950
           text: Color(0xFFE2E8F0), // Slate 200
           card: Color(0xFF0F172A),
-          border: Color(0xFF1E293B),
+          border: AppTheme.surfaceLight,
         ),
         NovelTheme.sepia: const _ThemeConfig(
           bg: Color(0xFFFBF0D9),
@@ -87,7 +88,7 @@ class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen> {
         ),
         NovelTheme.light: const _ThemeConfig(
           bg: Color(0xFFFFFFFF),
-          text: Color(0xFF1E293B),
+          text: AppTheme.surfaceLight,
           card: Color(0xFFF8FAFC),
           border: Color(0xFFE2E8F0),
         ),
@@ -149,7 +150,7 @@ class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen> {
             data: (content) {
               if (content.trim().isEmpty) {
                 return const Center(
-                  child: Text('未解析出小说正文内容。', style: TextStyle(color: const Color(0xFF64748B))),
+                  child: Text('未解析出小说正文内容。', style: TextStyle(color: AppTheme.textSecondary)),
                 );
               }
 
@@ -185,7 +186,7 @@ class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen> {
               );
             },
             loading: () => const Center(
-              child: CircularProgressIndicator(color: const Color(0xFF8B5CF6)),
+              child: CircularProgressIndicator(color: AppTheme.primary),
             ),
             error: (err, _) => Center(
               child: Padding(
@@ -193,7 +194,7 @@ class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(LucideIcons.octagonAlert, size: 48, color: const Color(0xFFF43F5E)),
+                    const Icon(LucideIcons.octagonAlert, size: 48, color: AppTheme.danger),
                     const SizedBox(height: 16),
                     Text(
                       '抓取小说正文失败: $err',
@@ -218,14 +219,14 @@ class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen> {
               right: 16,
               bottom: 16,
               child: Material(
-                color: const Color(0xFF0F172A), // Deep Slate 900
+                color: AppTheme.surface, // Deep Slate 900
                 elevation: 10,
                 borderRadius: BorderRadius.circular(20),
                 child: Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: const Color(0xFF1E293B)),
+                    border: Border.all(color: AppTheme.surfaceLight),
                   ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -234,7 +235,7 @@ class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen> {
                       // Themes Selector
                       const Text(
                         '背景主题',
-                        style: TextStyle(color: const Color(0xFF64748B), fontSize: 10, fontWeight: FontWeight.bold),
+                        style: TextStyle(color: AppTheme.textSecondary, fontSize: 10, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 8),
                       Row(
@@ -255,7 +256,7 @@ class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen> {
                                 color: cfg.bg,
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(
-                                  color: isSelected ? const Color(0xFF8B5CF6) : cfg.border,
+                                  color: isSelected ? AppTheme.primary : cfg.border,
                                   width: isSelected ? 2 : 1,
                                 ),
                               ),
@@ -273,7 +274,7 @@ class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen> {
                           );
                         }).toList(),
                       ),
-                      const Divider(color: Color(0xFF1E293B), height: 24),
+                      const Divider(color: AppTheme.surfaceLight, height: 24),
 
                       // Font size adjustments
                       Row(
@@ -284,7 +285,7 @@ class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen> {
                             children: [
                               const Text(
                                 '字号大小',
-                                style: TextStyle(color: const Color(0xFF64748B), fontSize: 10, fontWeight: FontWeight.bold),
+                                style: TextStyle(color: AppTheme.textSecondary, fontSize: 10, fontWeight: FontWeight.bold),
                               ),
                               const SizedBox(height: 4),
                               Text(
@@ -315,7 +316,7 @@ class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen> {
                           ),
                         ],
                       ),
-                      const Divider(color: Color(0xFF1E293B), height: 24),
+                      const Divider(color: AppTheme.surfaceLight, height: 24),
 
                       // Font family toggles
                       Row(
@@ -326,7 +327,7 @@ class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen> {
                             style: TextStyle(color: Colors.white70, fontSize: 12),
                           ),
                           Switch(
-                            activeColor: const Color(0xFF8B5CF6),
+                            activeColor: AppTheme.primary,
                             value: _serifFont,
                             onChanged: (val) {
                               setState(() {
@@ -348,7 +349,7 @@ class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen> {
 
   Widget _buildChaptersDrawer(List<Chapter> chapters) {
     return Drawer(
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: AppTheme.surface,
       child: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -357,7 +358,7 @@ class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen> {
               padding: EdgeInsets.all(16.0),
               child: Row(
                 children: [
-                  Icon(LucideIcons.bookOpen, color: const Color(0xFF8B5CF6), size: 20),
+                  Icon(LucideIcons.bookOpen, color: AppTheme.primary, size: 20),
                   SizedBox(width: 8),
                   Text(
                     '章节目录',
@@ -370,7 +371,7 @@ class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen> {
                 ],
               ),
             ),
-            const Divider(color: Color(0xFF1E293B)),
+            const Divider(color: AppTheme.surfaceLight),
             Expanded(
               child: ListView.builder(
                 padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -381,10 +382,10 @@ class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen> {
                   return Container(
                     margin: const EdgeInsets.only(bottom: 8),
                     decoration: BoxDecoration(
-                      color: isCurrent ? const Color(0xFF8B5CF6).withOpacity(0.1) : Colors.transparent,
+                      color: isCurrent ? AppTheme.primary.withOpacity(0.1) : Colors.transparent,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: isCurrent ? const Color(0xFF8B5CF6).withOpacity(0.3) : Colors.transparent,
+                        color: isCurrent ? AppTheme.primary.withOpacity(0.3) : Colors.transparent,
                       ),
                     ),
                     child: ListTile(
@@ -393,7 +394,7 @@ class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          color: isCurrent ? const Color(0xFF8B5CF6) : const Color(0xFF64748B),
+                          color: isCurrent ? AppTheme.primary : AppTheme.textSecondary,
                           fontSize: 13,
                           fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
                         ),

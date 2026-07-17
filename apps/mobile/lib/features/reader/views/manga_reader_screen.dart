@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_theme.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -98,7 +99,7 @@ class _MangaReaderScreenState extends ConsumerState<MangaReaderScreen> {
             return const Center(
               child: Text(
                 '未解析到可用漫画图片。',
-                style: TextStyle(color: const Color(0xFF64748B)),
+                style: TextStyle(color: AppTheme.textSecondary),
               ),
             );
           }
@@ -121,15 +122,15 @@ class _MangaReaderScreenState extends ConsumerState<MangaReaderScreen> {
                         fit: BoxFit.contain,
                         placeholder: (context, url) => Container(
                           height: 300,
-                          color: const Color(0xFF0F172A),
+                          color: AppTheme.surface,
                           child: const Center(
-                            child: CircularProgressIndicator(color: const Color(0xFF8B5CF6)),
+                            child: CircularProgressIndicator(color: AppTheme.primary),
                           ),
                         ),
                         errorWidget: (context, url, error) => Container(
                           height: 200,
-                          color: const Color(0xFF0F172A),
-                          child: const Icon(LucideIcons.image, color: const Color(0xFF64748B)),
+                          color: AppTheme.surface,
+                          child: const Icon(LucideIcons.image, color: AppTheme.textSecondary),
                         ),
                       ),
                       const SizedBox(height: 6),
@@ -137,7 +138,7 @@ class _MangaReaderScreenState extends ConsumerState<MangaReaderScreen> {
                         '${index + 1} / ${images.length}',
                         style: const TextStyle(
                           fontSize: 10,
-                          color: const Color(0xFF64748B),
+                          color: AppTheme.textSecondary,
                           fontFamily: 'monospace',
                         ),
                       ),
@@ -149,7 +150,7 @@ class _MangaReaderScreenState extends ConsumerState<MangaReaderScreen> {
           );
         },
         loading: () => const Center(
-          child: CircularProgressIndicator(color: const Color(0xFF8B5CF6)),
+          child: CircularProgressIndicator(color: AppTheme.primary),
         ),
         error: (err, _) => Center(
           child: Padding(
@@ -157,7 +158,7 @@ class _MangaReaderScreenState extends ConsumerState<MangaReaderScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(LucideIcons.circleAlert, size: 48, color: const Color(0xFFF43F5E)),
+                const Icon(LucideIcons.circleAlert, size: 48, color: AppTheme.danger),
                 const SizedBox(height: 16),
                 Text(
                   '获取漫画图片失败: $err',
@@ -179,7 +180,7 @@ class _MangaReaderScreenState extends ConsumerState<MangaReaderScreen> {
 
   Widget _buildChaptersDrawer(List<Chapter> chapters) {
     return Drawer(
-      backgroundColor: const Color(0xFF0F172A), // Slate 900
+      backgroundColor: AppTheme.surface, // Slate 900
       child: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -188,7 +189,7 @@ class _MangaReaderScreenState extends ConsumerState<MangaReaderScreen> {
               padding: EdgeInsets.all(16.0),
               child: Row(
                 children: [
-                  Icon(LucideIcons.bookOpen, color: const Color(0xFF8B5CF6), size: 20),
+                  Icon(LucideIcons.bookOpen, color: AppTheme.primary, size: 20),
                   SizedBox(width: 8),
                   Text(
                     '章节跳转',
@@ -201,7 +202,7 @@ class _MangaReaderScreenState extends ConsumerState<MangaReaderScreen> {
                 ],
               ),
             ),
-            const Divider(color: Color(0xFF1E293B)),
+            const Divider(color: AppTheme.surfaceLight),
             Expanded(
               child: ListView.builder(
                 padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -212,10 +213,10 @@ class _MangaReaderScreenState extends ConsumerState<MangaReaderScreen> {
                   return Container(
                     margin: const EdgeInsets.only(bottom: 8),
                     decoration: BoxDecoration(
-                      color: isCurrent ? const Color(0xFF8B5CF6).withOpacity(0.1) : Colors.transparent,
+                      color: isCurrent ? AppTheme.primary.withOpacity(0.1) : Colors.transparent,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: isCurrent ? const Color(0xFF8B5CF6).withOpacity(0.3) : Colors.transparent,
+                        color: isCurrent ? AppTheme.primary.withOpacity(0.3) : Colors.transparent,
                       ),
                     ),
                     child: ListTile(
@@ -224,7 +225,7 @@ class _MangaReaderScreenState extends ConsumerState<MangaReaderScreen> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          color: isCurrent ? const Color(0xFF8B5CF6) : const Color(0xFF64748B),
+                          color: isCurrent ? AppTheme.primary : AppTheme.textSecondary,
                           fontSize: 13,
                           fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
                         ),

@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -293,7 +294,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           );
         },
         loading: () => const Center(
-          child: CircularProgressIndicator(color: const Color(0xFF8B5CF6)),
+          child: CircularProgressIndicator(color: AppTheme.primary),
         ),
         error: (err, _) => _buildErrorView('加载播放器失败: $err'),
       ),
@@ -307,7 +308,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(LucideIcons.triangleAlert, size: 48, color: const Color(0xFFF43F5E)),
+            const Icon(LucideIcons.triangleAlert, size: 48, color: AppTheme.danger),
             const SizedBox(height: 16),
             Text(
               message,
@@ -384,12 +385,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                 children: [
                   Text(
                     _formatDuration(_position),
-                    style: const TextStyle(color: const Color(0xFF64748B), fontSize: 11),
+                    style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
                   ),
                   Expanded(
                     child: Slider(
-                      activeColor: const Color(0xFF8B5CF6),
-                      inactiveColor: const Color(0xFF1E293B),
+                      activeColor: AppTheme.primary,
+                      inactiveColor: AppTheme.surfaceLight,
                       min: 0.0,
                       max: _duration.inMilliseconds.toDouble(),
                       value: _position.inMilliseconds.toDouble().clamp(
@@ -403,7 +404,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                   ),
                   Text(
                     _formatDuration(_duration),
-                    style: const TextStyle(color: const Color(0xFF64748B), fontSize: 11),
+                    style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
                   ),
                 ],
               ),
@@ -434,7 +435,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                       IconButton(
                         icon: Icon(
                           _danmakuEnabled ? LucideIcons.messageSquare : LucideIcons.messageSquare,
-                          color: _danmakuEnabled ? const Color(0xFF8B5CF6) : const Color(0xFF64748B),
+                          color: _danmakuEnabled ? AppTheme.primary : AppTheme.textSecondary,
                         ),
                         onPressed: () {
                           setState(() {

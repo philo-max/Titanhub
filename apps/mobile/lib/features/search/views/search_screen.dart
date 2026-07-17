@@ -34,14 +34,18 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          backgroundColor: const Color(0xFF1F2937),
+          backgroundColor: AppTheme.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppTheme.radiusLG),
+            side: const BorderSide(color: AppTheme.border, width: 1),
+          ),
           title: const Row(
             children: [
-              Icon(Icons.dns, color: const Color(0xFF8B5CF6)),
+              Icon(Icons.dns, color: AppTheme.primary),
               SizedBox(width: 8),
               Text(
                 '配置服务器 URL',
-                style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                style: TextStyle(color: AppTheme.textPrimary, fontSize: 18, fontWeight: FontWeight.bold),
               ),
             ],
           ),
@@ -51,20 +55,20 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             children: [
               const Text(
                 '请输入后端 API 服务器的完整 HTTP 地址。如果是本地开发服务器，确保手机与电脑在同一局域网下，并使用电脑的局域网 IP (如 http://192.168.x.x:3001)。',
-                style: TextStyle(color: const Color(0xFF64748B), fontSize: 13),
+                style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
               ),
               const SizedBox(height: 16),
               TextField(
                 controller: textController,
-                style: const TextStyle(color: Colors.white),
+                style: const TextStyle(color: AppTheme.textPrimary),
                 decoration: const InputDecoration(
                   labelText: '服务器 URL',
-                  labelStyle: TextStyle(color: const Color(0xFF64748B)),
+                  labelStyle: TextStyle(color: AppTheme.textSecondary),
                   enabledBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: const Color(0xFF64748B)),
+                    borderSide: BorderSide(color: AppTheme.border),
                   ),
                   focusedBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: const Color(0xFF8B5CF6)),
+                    borderSide: BorderSide(color: AppTheme.primary),
                   ),
                 ),
               ),
@@ -73,12 +77,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('取消', style: TextStyle(color: const Color(0xFF64748B))),
+              child: const Text('取消', style: TextStyle(color: AppTheme.textSecondary)),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF8B5CF6),
+                backgroundColor: AppTheme.primary,
                 foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppTheme.radiusMD),
+                ),
               ),
               onPressed: () async {
                 final newUrl = textController.text.trim();
@@ -89,7 +96,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text('服务器 URL 已更新为: $newUrl'),
-                        backgroundColor: const Color(0xFF8B5CF6),
+                        backgroundColor: AppTheme.primary,
                       ),
                     );
                     ref.invalidate(pluginsListProvider);
@@ -120,7 +127,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       appBar: AppBar(
         title: const Row(
           children: [
-            Icon(Icons.bolt, color: const Color(0xFF8B5CF6)),
+            Icon(Icons.bolt, color: AppTheme.primary),
             SizedBox(width: 8),
             Text(
               'Titanhub',
@@ -140,7 +147,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               return IconButton(
                 icon: Icon(
                   token != null ? Icons.account_circle : Icons.person_outline,
-                  color: token != null ? const Color(0xFF8B5CF6) : const Color(0xFF64748B),
+                  color: token != null ? AppTheme.primary : AppTheme.textSecondary,
                 ),
                 onPressed: () {
                   showDialog(
@@ -164,7 +171,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.circle, color: const Color(0xFF10B981), size: 8),
+                  const Icon(Icons.circle, color: AppTheme.success, size: 8),
                   const SizedBox(width: 6),
                   backendStatus.when(
                     data: (list) => Text(
@@ -173,7 +180,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                     ),
                     error: (_, __) => const Text(
                       'Offline',
-                      style: TextStyle(fontSize: 11, color: const Color(0xFFF43F5E)),
+                      style: TextStyle(fontSize: 11, color: AppTheme.danger),
                     ),
                     loading: () => const SizedBox(
                       width: 10,
@@ -199,7 +206,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                   const Text(
                     '一个应用，看遍所有',
                     style: TextStyle(
-                      color: const Color(0xFF64748B),
+                      color: AppTheme.textSecondary,
                       fontSize: 16,
                       fontWeight: FontWeight.w500,
                     ),
@@ -265,7 +272,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                         padding: EdgeInsets.symmetric(vertical: 64.0),
                         child: Text(
                           '未搜索到相关动漫内容。',
-                          style: TextStyle(color: const Color(0xFF64748B)),
+                          style: TextStyle(color: AppTheme.textSecondary),
                         ),
                       ),
                     ),
@@ -398,7 +405,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                     child: Text(
                       '执行失败: $err',
                       textAlign: TextAlign.center,
-                      style: const TextStyle(color: const Color(0xFFF43F5E)),
+                      style: const TextStyle(color: AppTheme.danger),
                     ),
                   ),
                 ),
@@ -409,11 +416,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                     padding: EdgeInsets.symmetric(vertical: 64.0),
                     child: Column(
                       children: [
-                        CircularProgressIndicator(color: const Color(0xFF8B5CF6)),
+                        CircularProgressIndicator(color: AppTheme.primary),
                         SizedBox(height: 16),
                         Text(
                           '正在隔离沙箱中加载并执行 JS 解析脚本...',
-                          style: TextStyle(color: const Color(0xFF64748B), fontSize: 13),
+                          style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
                         ),
                       ],
                     ),
@@ -432,7 +439,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                 crossAxisSpacing: 16,
                 childAspectRatio: 1.4,
                 children: [
-                  _buildCategoryCard(context, '动漫 (Anime)', LucideIcons.film, '30,000+ 部', const Color(0xFF8B5CF6)),
+                  _buildCategoryCard(context, '动漫 (Anime)', LucideIcons.film, '30,000+ 部', AppTheme.primary),
                   _buildCategoryCard(context, '漫画 (Manga)', LucideIcons.bookOpen, '50,000+ 本', Colors.cyanAccent),
                   _buildCategoryCard(context, '轻小说 (Novel)', LucideIcons.fileText, '15,000+ 卷', Colors.pinkAccent),
                   _buildCategoryCard(context, '影视 (Movie)', LucideIcons.tv, '10,000+ 部', Colors.amberAccent),
@@ -453,9 +460,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   ) {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF0F172A),
+        color: AppTheme.surface,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFF1E293B)),
+        border: Border.all(color: AppTheme.surfaceLight),
       ),
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -473,7 +480,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                 ),
                 child: Icon(icon, color: accentColor, size: 20),
               ),
-              const Icon(LucideIcons.chevronRight, color: const Color(0xFF64748B), size: 16),
+              const Icon(LucideIcons.chevronRight, color: AppTheme.textSecondary, size: 16),
             ],
           ),
           Column(
@@ -486,7 +493,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               const SizedBox(height: 2),
               Text(
                 count,
-                style: const TextStyle(fontSize: 10, color: const Color(0xFF64748B)),
+                style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary),
               ),
             ],
           ),

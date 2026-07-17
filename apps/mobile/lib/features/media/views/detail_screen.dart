@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_theme.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -24,7 +25,7 @@ class DetailScreen extends ConsumerWidget {
     final chaptersAsync = ref.watch(mediaChaptersProvider((pluginId: pluginId, mediaId: mediaId)));
 
     return Scaffold(
-      backgroundColor: const Color(0xFF030712), // Slate 950
+      backgroundColor: AppTheme.background, // Slate 950
       body: detailAsync.when(
         data: (detail) => CustomScrollView(
           slivers: [
@@ -43,7 +44,7 @@ class DetailScreen extends ConsumerWidget {
                   data: (isFav) => IconButton(
                     icon: Icon(
                       isFav ? LucideIcons.bookmark : LucideIcons.bookmark,
-                      color: isFav ? const Color(0xFF8B5CF6) : Colors.white,
+                      color: isFav ? AppTheme.primary : Colors.white,
                     ),
                     onPressed: () async {
                       final db = ref.read(databaseProvider);
@@ -84,7 +85,7 @@ class DetailScreen extends ConsumerWidget {
                           end: Alignment.bottomCenter,
                           colors: [
                             Colors.transparent,
-                            Color(0xFF030712),
+                            AppTheme.background,
                           ],
                         ),
                       ),
@@ -105,7 +106,7 @@ class DetailScreen extends ConsumerWidget {
                               offset: const Offset(0, 10),
                             ),
                           ],
-                          border: Border.all(color: const Color(0xFF1E293B)),
+                          border: Border.all(color: AppTheme.surfaceLight),
                         ),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(15),
@@ -151,10 +152,10 @@ class DetailScreen extends ConsumerWidget {
                           return Chip(
                             label: Text(
                               genre,
-                              style: const TextStyle(fontSize: 11, color: const Color(0xFF64748B)),
+                              style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
                             ),
-                            backgroundColor: const Color(0xFF0F172A),
-                            side: const BorderSide(color: Color(0xFF1E293B)),
+                            backgroundColor: AppTheme.surface,
+                            side: const BorderSide(color: AppTheme.surfaceLight),
                             padding: const EdgeInsets.symmetric(horizontal: 4),
                           );
                         }).toList(),
@@ -167,8 +168,8 @@ class DetailScreen extends ConsumerWidget {
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       decoration: const BoxDecoration(
                         border: Border(
-                          top: BorderSide(color: Color(0xFF1E293B)),
-                          bottom: BorderSide(color: Color(0xFF1E293B)),
+                          top: BorderSide(color: AppTheme.surfaceLight),
+                          bottom: BorderSide(color: AppTheme.surfaceLight),
                         ),
                       ),
                       child: Row(
@@ -176,11 +177,11 @@ class DetailScreen extends ConsumerWidget {
                         children: [
                           Row(
                             children: [
-                              const Icon(LucideIcons.user, size: 16, color: const Color(0xFF8B5CF6)),
+                              const Icon(LucideIcons.user, size: 16, color: AppTheme.primary),
                               const SizedBox(width: 8),
                               Text(
                                 '作者: ${detail.author ?? '未知'}',
-                                style: const TextStyle(fontSize: 13, color: const Color(0xFF64748B)),
+                                style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary),
                               ),
                             ],
                           ),
@@ -190,7 +191,7 @@ class DetailScreen extends ConsumerWidget {
                               const SizedBox(width: 8),
                               Text(
                                 '更新: ${detail.lastUpdate ?? '最近'}',
-                                style: const TextStyle(fontSize: 13, color: const Color(0xFF64748B)),
+                                style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary),
                               ),
                             ],
                           ),
@@ -206,9 +207,9 @@ class DetailScreen extends ConsumerWidget {
                         return Container(
                           margin: const EdgeInsets.only(bottom: 20),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF8B5CF6).withOpacity(0.05),
+                            color: AppTheme.primary.withOpacity(0.05),
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: const Color(0xFF8B5CF6).withOpacity(0.2)),
+                            border: Border.all(color: AppTheme.primary.withOpacity(0.2)),
                           ),
                           child: InkWell(
                             borderRadius: BorderRadius.circular(12),
@@ -225,7 +226,7 @@ class DetailScreen extends ConsumerWidget {
                               padding: const EdgeInsets.all(12),
                               child: Row(
                                 children: [
-                                  const Icon(LucideIcons.history, color: const Color(0xFF8B5CF6), size: 20),
+                                  const Icon(LucideIcons.history, color: AppTheme.primary, size: 20),
                                   const SizedBox(width: 10),
                                   Expanded(
                                     child: Column(
@@ -233,7 +234,7 @@ class DetailScreen extends ConsumerWidget {
                                       children: [
                                         const Text(
                                           '上次看至',
-                                          style: TextStyle(color: const Color(0xFF64748B), fontSize: 10),
+                                          style: TextStyle(color: AppTheme.textSecondary, fontSize: 10),
                                         ),
                                         Text(
                                           track.chapterId ?? '第一章',
@@ -242,7 +243,7 @@ class DetailScreen extends ConsumerWidget {
                                       ],
                                     ),
                                   ),
-                                  const Icon(LucideIcons.chevronRight, color: const Color(0xFF8B5CF6), size: 16),
+                                  const Icon(LucideIcons.chevronRight, color: AppTheme.primary, size: 16),
                                 ],
                               ),
                             ),
@@ -267,15 +268,15 @@ class DetailScreen extends ConsumerWidget {
                       width: double.infinity,
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF0F172A).withOpacity(0.5),
+                        color: AppTheme.surface.withOpacity(0.5),
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: const Color(0xFF0F172A)),
+                        border: Border.all(color: AppTheme.surface),
                       ),
                       child: Text(
                         detail.description ?? '暂无简介。',
                         style: const TextStyle(
                           fontSize: 13,
-                          color: const Color(0xFF64748B),
+                          color: AppTheme.textSecondary,
                           height: 1.5,
                         ),
                       ),
@@ -295,7 +296,7 @@ class DetailScreen extends ConsumerWidget {
                   children: [
                     const Row(
                       children: [
-                        Icon(LucideIcons.circlePlay, color: const Color(0xFF8B5CF6), size: 20),
+                        Icon(LucideIcons.circlePlay, color: AppTheme.primary, size: 20),
                         SizedBox(width: 8),
                         Text(
                           '选集 / 章节播放',
@@ -314,7 +315,7 @@ class DetailScreen extends ConsumerWidget {
                           return const Center(
                             child: Padding(
                               padding: EdgeInsets.symmetric(vertical: 24),
-                              child: Text('无可用播放章节。', style: TextStyle(color: const Color(0xFF64748B))),
+                              child: Text('无可用播放章节。', style: TextStyle(color: AppTheme.textSecondary)),
                             ),
                           );
                         }
@@ -333,9 +334,9 @@ class DetailScreen extends ConsumerWidget {
                             final ch = chapters[index];
                             return Container(
                               decoration: BoxDecoration(
-                                color: const Color(0xFF0F172A),
+                                color: AppTheme.surface,
                                 borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: const Color(0xFF1E293B)),
+                                border: Border.all(color: AppTheme.surfaceLight),
                               ),
                               child: InkWell(
                                 borderRadius: BorderRadius.circular(12),
@@ -361,14 +362,14 @@ class DetailScreen extends ConsumerWidget {
                                           style: const TextStyle(
                                             fontSize: 13,
                                             fontWeight: FontWeight.w600,
-                                            color: const Color(0xFF64748B),
+                                            color: AppTheme.textSecondary,
                                           ),
                                         ),
                                       ),
                                       const Icon(
                                         LucideIcons.play,
                                         size: 12,
-                                        color: const Color(0xFF8B5CF6),
+                                        color: AppTheme.primary,
                                       ),
                                     ],
                                   ),
@@ -381,13 +382,13 @@ class DetailScreen extends ConsumerWidget {
                       loading: () => const Center(
                         child: Padding(
                           padding: EdgeInsets.symmetric(vertical: 24),
-                          child: CircularProgressIndicator(color: const Color(0xFF8B5CF6)),
+                          child: CircularProgressIndicator(color: AppTheme.primary),
                         ),
                       ),
                       error: (err, _) => Center(
                         child: Padding(
                           padding: const EdgeInsets.symmetric(vertical: 24),
-                          child: Text('加载章节失败: $err', style: const TextStyle(color: const Color(0xFFF43F5E))),
+                          child: Text('加载章节失败: $err', style: const TextStyle(color: AppTheme.danger)),
                         ),
                       ),
                     ),
@@ -399,19 +400,19 @@ class DetailScreen extends ConsumerWidget {
           ],
         ),
         loading: () => const Center(
-          child: CircularProgressIndicator(color: const Color(0xFF8B5CF6)),
+          child: CircularProgressIndicator(color: AppTheme.primary),
         ),
         error: (err, _) => Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(LucideIcons.circleHelp, size: 48, color: const Color(0xFFF43F5E)),
+              const Icon(LucideIcons.circleHelp, size: 48, color: AppTheme.danger),
               const SizedBox(height: 16),
               const Text('加载作品失败', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                child: Text('$err', textAlign: TextAlign.center, style: const TextStyle(color: const Color(0xFF64748B))),
+                child: Text('$err', textAlign: TextAlign.center, style: const TextStyle(color: AppTheme.textSecondary)),
               ),
               const SizedBox(height: 24),
               ElevatedButton(
