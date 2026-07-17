@@ -68,6 +68,28 @@ jobs:
           cd apps/mobile
           flutter create --platforms=android .
           sed -i 's/android:label="titanhub"/android:label="Titanhub"/g' android/app/src/main/AndroidManifest.xml
+          
+          # Append JVM target compatibility overrides to force Java 11 for all plugin dependencies
+          cat << 'EOF' >> android/build.gradle
+          subprojects {
+              afterEvaluate { project ->
+                  if (project.hasProperty('android')) {
+                      project.android {
+                          compileOptions {
+                              sourceCompatibility = JavaVersion.VERSION_11
+                              targetCompatibility = JavaVersion.VERSION_11
+                          }
+                      }
+                  }
+              }
+              tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+                  kotlinOptions {
+                      jvmTarget = '11'
+                  }
+              }
+          }
+          EOF
+
           flutter pub get
           flutter pub run flutter_launcher_icons -f flutter_launcher_icons_android.yaml
           flutter pub run build_runner build --delete-conflicting-outputs
