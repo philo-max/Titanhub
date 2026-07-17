@@ -68,6 +68,7 @@ jobs:
           cd apps/mobile
           flutter create --platforms=android .
           flutter pub get
+          flutter pub run build_runner build --delete-conflicting-outputs
 
       - name: Build APK (split-per-abi)
         run: |
@@ -106,6 +107,7 @@ jobs:
           cd apps/mobile
           flutter create --platforms=windows .
           flutter pub get
+          flutter pub run build_runner build --delete-conflicting-outputs
 
       - name: Build Windows
         run: |
@@ -143,6 +145,7 @@ jobs:
           cd apps/mobile
           flutter create --platforms=ios .
           flutter pub get
+          flutter pub run build_runner build --delete-conflicting-outputs
 
       - name: Build iOS (No Sign)
         run: |
