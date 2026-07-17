@@ -193,7 +193,7 @@ class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(LucideIcons.alertOctagon, size: 48, color: const Color(0xFFF43F5E)),
+                    const Icon(LucideIcons.octagonAlert, size: 48, color: const Color(0xFFF43F5E)),
                     const SizedBox(height: 16),
                     Text(
                       '抓取小说正文失败: $err',

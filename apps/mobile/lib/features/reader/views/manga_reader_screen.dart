@@ -157,7 +157,7 @@ class _MangaReaderScreenState extends ConsumerState<MangaReaderScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(LucideIcons.alertCircle, size: 48, color: const Color(0xFFF43F5E)),
+                const Icon(LucideIcons.circleAlert, size: 48, color: const Color(0xFFF43F5E)),
                 const SizedBox(height: 16),
                 Text(
                   '获取漫画图片失败: $err',

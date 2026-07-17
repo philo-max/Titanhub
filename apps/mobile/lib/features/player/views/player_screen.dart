@@ -307,7 +307,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(LucideIcons.alertTriangle, size: 48, color: const Color(0xFFF43F5E)),
+            const Icon(LucideIcons.triangleAlert, size: 48, color: const Color(0xFFF43F5E)),
             const SizedBox(height: 16),
             Text(
               message,

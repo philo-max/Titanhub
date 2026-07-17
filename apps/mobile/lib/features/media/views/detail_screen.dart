@@ -50,7 +50,7 @@ class DetailScreen extends ConsumerWidget {
                       if (isFav) {
                         await db.deleteFavorite(mediaId);
                       } else {
-                        await db.saveFavorite(LocalFavoritesCompanion(
+                        await db.saveFavorite(LocalFavoriteCompanion(
                           id: Value(DateTime.now().millisecondsSinceEpoch.toString()),
                           mediaId: Value(mediaId),
                           pluginId: Value(pluginId),
@@ -295,7 +295,7 @@ class DetailScreen extends ConsumerWidget {
                   children: [
                     const Row(
                       children: [
-                        Icon(LucideIcons.playCircle, color: const Color(0xFF8B5CF6), size: 20),
+                        Icon(LucideIcons.circlePlay, color: const Color(0xFF8B5CF6), size: 20),
                         SizedBox(width: 8),
                         Text(
                           '选集 / 章节播放',
@@ -405,7 +405,7 @@ class DetailScreen extends ConsumerWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(LucideIcons.helpCircle, size: 48, color: const Color(0xFFF43F5E)),
+              const Icon(LucideIcons.circleHelp, size: 48, color: const Color(0xFFF43F5E)),
               const SizedBox(height: 16),
               const Text('加载作品失败', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),

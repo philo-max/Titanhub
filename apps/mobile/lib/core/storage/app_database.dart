@@ -54,11 +54,11 @@ class AppDatabase extends _$AppDatabase {
   }
 
   // Favorites DAO Methods
-  Future<List<LocalFavoritesData>> getAllFavorites() => select(localFavorites).get();
-  Future<LocalFavoritesData?> getFavorite(String mediaId) {
+  Future<List<LocalFavorite>> getAllFavorites() => select(localFavorites).get();
+  Future<LocalFavorite?> getFavorite(String mediaId) {
     return (select(localFavorites)..where((f) => f.mediaId.equals(mediaId))).getSingleOrNull();
   }
-  Future<int> saveFavorite(LocalFavoritesCompanion entity) {
+  Future<int> saveFavorite(LocalFavoriteCompanion entity) {
     return into(localFavorites).insertOnConflictUpdate(entity);
   }
   Future<int> deleteFavorite(String mediaId) {
