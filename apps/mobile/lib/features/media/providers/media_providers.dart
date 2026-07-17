@@ -101,7 +101,7 @@ extension FlatMap<T> on Iterable<Iterable<T>> {
 
 final isFavoriteProvider = StreamProvider.family<bool, String>((ref, mediaId) {
   final db = ref.watch(databaseProvider);
-  return db.select(db.localFavorites).where((tbl) => tbl.mediaId.equals(mediaId)).watch().map((list) => list.isNotEmpty);
+  return (db.select(db.localFavorites)..where((tbl) => tbl.mediaId.equals(mediaId))).watch().map((list) => list.isNotEmpty);
 });
 
 final lastTrackingProvider = StreamProvider.family<LocalTrackingData?, String>((ref, mediaId) {

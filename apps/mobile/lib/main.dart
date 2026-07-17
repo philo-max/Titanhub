@@ -42,7 +42,7 @@ class TitanhubApp extends ConsumerWidget {
           foregroundColor: AppTheme.textPrimary,
           elevation: 0,
         ),
-        cardTheme: CardTheme(
+        cardTheme: CardThemeData(
           color: AppTheme.surface,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppTheme.radiusLG),

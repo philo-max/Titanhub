@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:lucide_icons/lucide_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../media/providers/media_providers.dart';
 import '../../media/models/media_models.dart';
 import '../../tracking/sync_provider.dart';
@@ -98,7 +98,7 @@ class _MangaReaderScreenState extends ConsumerState<MangaReaderScreen> {
             return const Center(
               child: Text(
                 '未解析到可用漫画图片。',
-                style: TextStyle(color: Colors.slate),
+                style: TextStyle(color: const Color(0xFF64748B)),
               ),
             );
           }
@@ -123,13 +123,13 @@ class _MangaReaderScreenState extends ConsumerState<MangaReaderScreen> {
                           height: 300,
                           color: const Color(0xFF0F172A),
                           child: const Center(
-                            child: CircularProgressIndicator(color: Colors.violetAccent),
+                            child: CircularProgressIndicator(color: const Color(0xFF8B5CF6)),
                           ),
                         ),
                         errorWidget: (context, url, error) => Container(
                           height: 200,
                           color: const Color(0xFF0F172A),
-                          child: const Icon(LucideIcons.image, color: Colors.slate),
+                          child: const Icon(LucideIcons.image, color: const Color(0xFF64748B)),
                         ),
                       ),
                       const SizedBox(height: 6),
@@ -137,7 +137,7 @@ class _MangaReaderScreenState extends ConsumerState<MangaReaderScreen> {
                         '${index + 1} / ${images.length}',
                         style: const TextStyle(
                           fontSize: 10,
-                          color: Colors.slate,
+                          color: const Color(0xFF64748B),
                           fontFamily: 'monospace',
                         ),
                       ),
@@ -149,7 +149,7 @@ class _MangaReaderScreenState extends ConsumerState<MangaReaderScreen> {
           );
         },
         loading: () => const Center(
-          child: CircularProgressIndicator(color: Colors.violetAccent),
+          child: CircularProgressIndicator(color: const Color(0xFF8B5CF6)),
         ),
         error: (err, _) => Center(
           child: Padding(
@@ -157,7 +157,7 @@ class _MangaReaderScreenState extends ConsumerState<MangaReaderScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(LucideIcons.alertCircle, size: 48, color: Colors.roseAccent),
+                const Icon(LucideIcons.alertCircle, size: 48, color: const Color(0xFFF43F5E)),
                 const SizedBox(height: 16),
                 Text(
                   '获取漫画图片失败: $err',
@@ -188,7 +188,7 @@ class _MangaReaderScreenState extends ConsumerState<MangaReaderScreen> {
               padding: EdgeInsets.all(16.0),
               child: Row(
                 children: [
-                  Icon(LucideIcons.bookOpen, color: Colors.violetAccent, size: 20),
+                  Icon(LucideIcons.bookOpen, color: const Color(0xFF8B5CF6), size: 20),
                   SizedBox(width: 8),
                   Text(
                     '章节跳转',
@@ -212,10 +212,10 @@ class _MangaReaderScreenState extends ConsumerState<MangaReaderScreen> {
                   return Container(
                     margin: const EdgeInsets.only(bottom: 8),
                     decoration: BoxDecoration(
-                      color: isCurrent ? Colors.violetAccent.withOpacity(0.1) : Colors.transparent,
+                      color: isCurrent ? const Color(0xFF8B5CF6).withOpacity(0.1) : Colors.transparent,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: isCurrent ? Colors.violetAccent.withOpacity(0.3) : Colors.transparent,
+                        color: isCurrent ? const Color(0xFF8B5CF6).withOpacity(0.3) : Colors.transparent,
                       ),
                     ),
                     child: ListTile(
@@ -224,7 +224,7 @@ class _MangaReaderScreenState extends ConsumerState<MangaReaderScreen> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          color: isCurrent ? Colors.violetAccent : Colors.slate,
+                          color: isCurrent ? const Color(0xFF8B5CF6) : const Color(0xFF64748B),
                           fontSize: 13,
                           fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
                         ),

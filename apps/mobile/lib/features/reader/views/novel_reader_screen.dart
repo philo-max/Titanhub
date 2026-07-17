@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:lucide_icons/lucide_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../media/providers/media_providers.dart';
 import '../../media/models/media_models.dart';
 import '../../tracking/sync_provider.dart';
@@ -149,7 +149,7 @@ class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen> {
             data: (content) {
               if (content.trim().isEmpty) {
                 return const Center(
-                  child: Text('未解析出小说正文内容。', style: TextStyle(color: Colors.slate)),
+                  child: Text('未解析出小说正文内容。', style: TextStyle(color: const Color(0xFF64748B))),
                 );
               }
 
@@ -185,7 +185,7 @@ class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen> {
               );
             },
             loading: () => const Center(
-              child: CircularProgressIndicator(color: Colors.violetAccent),
+              child: CircularProgressIndicator(color: const Color(0xFF8B5CF6)),
             ),
             error: (err, _) => Center(
               child: Padding(
@@ -193,7 +193,7 @@ class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(LucideIcons.alertOctagon, size: 48, color: Colors.roseAccent),
+                    const Icon(LucideIcons.alertOctagon, size: 48, color: const Color(0xFFF43F5E)),
                     const SizedBox(height: 16),
                     Text(
                       '抓取小说正文失败: $err',
@@ -234,7 +234,7 @@ class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen> {
                       // Themes Selector
                       const Text(
                         '背景主题',
-                        style: TextStyle(color: Colors.slate, fontSize: 10, fontWeight: FontWeight.bold),
+                        style: TextStyle(color: const Color(0xFF64748B), fontSize: 10, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 8),
                       Row(
@@ -255,7 +255,7 @@ class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen> {
                                 color: cfg.bg,
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(
-                                  color: isSelected ? Colors.violetAccent : cfg.border,
+                                  color: isSelected ? const Color(0xFF8B5CF6) : cfg.border,
                                   width: isSelected ? 2 : 1,
                                 ),
                               ),
@@ -284,7 +284,7 @@ class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen> {
                             children: [
                               const Text(
                                 '字号大小',
-                                style: TextStyle(color: Colors.slate, fontSize: 10, fontWeight: FontWeight.bold),
+                                style: TextStyle(color: const Color(0xFF64748B), fontSize: 10, fontWeight: FontWeight.bold),
                               ),
                               const SizedBox(height: 4),
                               Text(
@@ -326,7 +326,7 @@ class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen> {
                             style: TextStyle(color: Colors.white70, fontSize: 12),
                           ),
                           Switch(
-                            activeColor: Colors.violetAccent,
+                            activeColor: const Color(0xFF8B5CF6),
                             value: _serifFont,
                             onChanged: (val) {
                               setState(() {
@@ -357,7 +357,7 @@ class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen> {
               padding: EdgeInsets.all(16.0),
               child: Row(
                 children: [
-                  Icon(LucideIcons.bookOpen, color: Colors.violetAccent, size: 20),
+                  Icon(LucideIcons.bookOpen, color: const Color(0xFF8B5CF6), size: 20),
                   SizedBox(width: 8),
                   Text(
                     '章节目录',
@@ -381,10 +381,10 @@ class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen> {
                   return Container(
                     margin: const EdgeInsets.only(bottom: 8),
                     decoration: BoxDecoration(
-                      color: isCurrent ? Colors.violetAccent.withOpacity(0.1) : Colors.transparent,
+                      color: isCurrent ? const Color(0xFF8B5CF6).withOpacity(0.1) : Colors.transparent,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: isCurrent ? Colors.violetAccent.withOpacity(0.3) : Colors.transparent,
+                        color: isCurrent ? const Color(0xFF8B5CF6).withOpacity(0.3) : Colors.transparent,
                       ),
                     ),
                     child: ListTile(
@@ -393,7 +393,7 @@ class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          color: isCurrent ? Colors.violetAccent : Colors.slate,
+                          color: isCurrent ? const Color(0xFF8B5CF6) : const Color(0xFF64748B),
                           fontSize: 13,
                           fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
                         ),
