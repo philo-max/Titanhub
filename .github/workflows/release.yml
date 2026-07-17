@@ -63,9 +63,10 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Get dependencies
+      - name: Create Android platform & Get dependencies
         run: |
           cd apps/mobile
+          flutter create --platforms=android .
           flutter pub get
 
       - name: Build APK (split-per-abi)
@@ -100,9 +101,10 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Get dependencies
+      - name: Create Windows platform & Get dependencies
         run: |
           cd apps/mobile
+          flutter create --platforms=windows .
           flutter pub get
 
       - name: Build Windows
@@ -136,9 +138,10 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Get dependencies
+      - name: Create iOS platform & Get dependencies
         run: |
           cd apps/mobile
+          flutter create --platforms=ios .
           flutter pub get
 
       - name: Build iOS (No Sign)
