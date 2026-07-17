@@ -69,7 +69,7 @@ jobs:
           flutter create --platforms=android .
           sed -i 's/android:label="titanhub"/android:label="Titanhub"/g' android/app/src/main/AndroidManifest.xml
           flutter pub get
-          flutter pub run flutter_launcher_icons
+          flutter pub run flutter_launcher_icons -f flutter_launcher_icons_android.yaml
           flutter pub run build_runner build --delete-conflicting-outputs
 
       - name: Build APK (split-per-abi)
@@ -112,7 +112,7 @@ jobs:
           (Get-Content windows/runner/main.cpp) -replace 'L"titanhub"', 'L"Titanhub"' | Out-File windows/runner/main.cpp -Encoding utf8
           (Get-Content windows/runner/CMakeLists.txt) -replace 'set\(BINARY_NAME "titanhub"\)', 'set(BINARY_NAME "Titanhub")' | Out-File windows/runner/CMakeLists.txt -Encoding utf8
           flutter pub get
-          flutter pub run flutter_launcher_icons
+          flutter pub run flutter_launcher_icons -f flutter_launcher_icons_windows.yaml
           flutter pub run build_runner build --delete-conflicting-outputs
 
       - name: Build Windows
@@ -152,7 +152,7 @@ jobs:
           flutter create --platforms=ios .
           sed -i 's/<string>titanhub<\/string>/<string>Titanhub<\/string>/g' ios/Runner/Info.plist
           flutter pub get
-          flutter pub run flutter_launcher_icons
+          flutter pub run flutter_launcher_icons -f flutter_launcher_icons_ios.yaml
           flutter pub run build_runner build --delete-conflicting-outputs
 
       - name: Build iOS (No Sign)
