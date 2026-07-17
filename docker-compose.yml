@@ -12,30 +12,20 @@ services:
       - pgdata:/var/lib/postgresql/data
     restart: unless-stopped
 
-#   redis:
-#     image: redis:7-alpine
-#     container_name: titanhub-redis
-#     ports:
-#       - '6379:6379'
-#     volumes:
-#       - redisdata:/data
-#     restart: unless-stopped
-
-#   minio:
-#     image: minio/minio:latest
-#     container_name: titanhub-minio
-#     environment:
-#       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-#       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadminpassword}
-#     ports:
-#       - '9000:9000'
-#       - '9001:9001'
-#     volumes:
-#       - miniodata:/data
-#     command: server /data --console-address ":9001"
-#     restart: unless-stopped
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: titanhub-server
+    environment:
+      PORT: 3001
+      DATABASE_URL: postgres://postgres:password123@postgres:5432/titanhub
+      JWT_SECRET: ${JWT_SECRET:-super-secret-jwt-key}
+    ports:
+      - '3001:3001'
+    depends_on:
+      - postgres
+    restart: unless-stopped
 
 volumes:
   pgdata:
-#   redisdata:
-#   miniodata:
