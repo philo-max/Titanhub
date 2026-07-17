@@ -150,7 +150,7 @@ jobs:
         run: |
           cd apps/mobile
           flutter create --platforms=ios .
-          sed -i 's/<string>titanhub<\/string>/<string>Titanhub<\/string>/g' ios/Runner/Info.plist
+          sed -i '' 's/titanhub/Titanhub/g' ios/Runner/Info.plist || true
           flutter pub get
           flutter pub run flutter_launcher_icons -f flutter_launcher_icons_ios.yaml
           flutter pub run build_runner build --delete-conflicting-outputs
