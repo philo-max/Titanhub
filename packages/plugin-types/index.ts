@@ -35,6 +35,19 @@ export interface AggregatedMediaItem extends MediaItem {
   providesVideo?: boolean;
 }
 
+export interface HubMediaSource {
+  pluginId: string;
+  pluginName: string;
+  mediaId: string;
+  providesVideo: boolean;
+  isMetadata: boolean;
+}
+
+export interface HubMediaGroup extends MediaItem {
+  mediaType: MediaType;
+  sources: HubMediaSource[];
+}
+
 export interface TitanhubPlugin {
   id: string;
   name: string;

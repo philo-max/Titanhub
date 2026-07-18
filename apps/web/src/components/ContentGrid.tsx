@@ -3,14 +3,19 @@
 import React, { useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { Loader2 } from 'lucide-react';
-import { AggregatedMediaItem } from '@titanhub/plugin-types';
+import type { MediaType, HubMediaGroup } from '@titanhub/plugin-types';
 import MediaCard from './MediaCard';
 import { useHomeStore } from '../stores/homeStore';
 import { animateEntranceStagger } from '../lib/animations';
 
-function detailHref(item: AggregatedMediaItem): string | null {
-  if (!item.pluginId) return null;
-  return `/${item.mediaType}/${item.pluginId}/${item.id}`;
+function detailHref(item: any): string | null {
+  if (!item.sources || item.sources.length === 0) return null;
+  const metaSource = item.sources.find((s: any) => s.isMetadata);
+  if (metaSource) {
+    return `/${item.mediaType}/${metaSource.pluginId}/${metaSource.mediaId}`;
+  }
+  const defaultSource = item.sources[0];
+  return `/${item.mediaType}/${defaultSource.pluginId}/${defaultSource.mediaId}`;
 }
 
 export default function ContentGrid() {
@@ -89,11 +94,16 @@ export default function ContentGrid() {
   return (
     <div className="w-full flex flex-col gap-8">
       <div ref={containerRef} className="w-full grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-6">
-        {items.map((item) => {
+        {items.map((item: any) => {
           const href = detailHref(item);
-          const card = <MediaCard item={item} originBadge={item.pluginName} isInfoSource={item.providesVideo === false} />;
+          const metaSource = item.sources?.find((s: any) => s.isMetadata);
+          const defaultSource = metaSource || item.sources?.[0];
+          const badge = metaSource ? '聚合数据' : (defaultSource?.pluginName || '未知');
+          const isInfoSource = metaSource ? true : false;
+          
+          const card = <MediaCard item={item} originBadge={badge} isInfoSource={isInfoSource} />;
           return (
-            <div key={`${activeCategory}-${item.pluginId}-${item.id}`} className="media-card-wrapper">
+            <div key={`${activeCategory}-${item.id}`} className="media-card-wrapper">
               {href ? <Link href={href}>{card}</Link> : card}
             </div>
           );

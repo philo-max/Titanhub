@@ -212,12 +212,21 @@ async function hardenedFetch(
       const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
       try {
-        res = await fetch(currentUrl, {
+        const fetchOptions: any = {
           ...options,
           method,
           redirect: 'manual', // Manually follow redirects to validate each hop
           signal: controller.signal,
-        });
+        };
+
+        // Use undici ProxyAgent if PROXY_URL is set
+        const proxyUrl = process.env.PROXY_URL || process.env.HTTP_PROXY || process.env.HTTPS_PROXY;
+        if (proxyUrl) {
+          const { ProxyAgent } = require('undici');
+          fetchOptions.dispatcher = new ProxyAgent(proxyUrl);
+        }
+
+        res = await fetch(currentUrl, fetchOptions);
         lastHeaders = {};
         // Safely extract headers (supports both standard Headers and plain objects)
         try {
@@ -865,6 +874,16 @@ export class PluginSandbox {
     vm.setProp(convertObj, 'decryptAesOfb', decryptAesOfbFunc);
     vm.setProp(convertObj, 'decryptRsa', decryptRsaFunc);
     vm.setProp(vm.global, 'Convert', convertObj);
+
+    // Ingest Alist Environment Variables
+    if (process.env.ALIST_BASE_URL) {
+      const alistBaseUrlHandle = trackBase(vm.newString(process.env.ALIST_BASE_URL));
+      vm.setProp(vm.global, 'ALIST_BASE_URL', alistBaseUrlHandle);
+    }
+    if (process.env.ALIST_TOKEN) {
+      const alistTokenHandle = trackBase(vm.newString(process.env.ALIST_TOKEN));
+      vm.setProp(vm.global, 'ALIST_TOKEN', alistTokenHandle);
+    }
 
     // 3. Evaluate the plugin code
     const evalResult = vm.evalCode(code);

@@ -14,6 +14,8 @@ import sync from './routes/sync';
 import danmakuRoutes from './routes/danmaku';
 import danmakuEnhanced from './routes/danmaku-enhanced';
 import aggregate from './routes/aggregate';
+import market from './routes/market';
+import visual from './routes/visual';
 import { PlaywrightSniffer } from './plugins/sniffer';
 import { M3u8AdFilter, M3u8Parser } from './plugins/m3u8';
 
@@ -22,12 +24,14 @@ const app = new Hono();
 // Enable CORS for all domains
 app.use('*', cors());
 
-// Mount authentication, sync & danmaku routes
+// Mount authentication, sync, danmaku & market routes
 app.route('/api/auth', auth);
 app.route('/api/sync', sync);
 app.route('/api/danmaku', danmakuRoutes);
 app.route('/api/danmaku', danmakuEnhanced);
 app.route('/api/aggregate', aggregate);
+app.route('/api/market', market);
+app.route('/api/visual', visual);
 
 // Seed Mock site HTML data for plugin scraping tests
 app.get('/mock-site/dmzj/manga-101', (c) => {
@@ -139,6 +143,23 @@ async function seedMockPlugin() {
       types: ['manga'] as const,
       file: 'mangadex.js',
     },
+    {
+      id: 'alist',
+      name: 'Alist 私有网盘',
+      types: ['anime', 'manga', 'novel', 'movie'] as const,
+      file: 'alist.js',
+    },
+    {
+      id: 'seedhub',
+      name: 'SeedHub 影视动漫',
+      types: ['movie', 'anime'] as const,
+      file: 'seedhub.js',
+    },
+    { id: 'dilidili', name: '嘀哩嘀哩 (Dilidili)', types: ['anime'] as const, file: 'dilidili.js' },
+    { id: 'dm5', name: '动漫岛 (DM5)', types: ['manga'] as const, file: 'dm5.js' },
+    { id: 'ssrfun', name: 'SSRFun动漫', types: ['anime'] as const, file: 'ssrfun.js' },
+    { id: 'cyfz', name: '次元方舟', types: ['anime'] as const, file: 'cyfz.js' },
+    { id: 'tver', name: 'TVer (官方生肉)', types: ['anime'] as const, file: 'tver.js' },
   ];
 
   try {
@@ -332,7 +353,25 @@ app.get('/api/plugins/:id/video/:chapterId', async (c) => {
   if (!result.success) {
     return c.json({ error: result.error }, 500);
   }
-  return c.json({ videos: result.data });
+
+  // Rewrite all M3U8 video streams to automatically route through local ad-filtering proxy
+  const host = c.req.header('host') || 'localhost:3001';
+  const protocol = c.req.url.startsWith('https') ? 'https' : 'http';
+  const apiBase = `${protocol}://${host}`;
+
+  const cleanVideos = (result.data || []).map((v: any) => {
+    if (v.url && (v.url.includes('.m3u8') || v.url.includes('m3u8'))) {
+      if (!v.url.includes('/api/m3u8/filter')) {
+        return {
+          ...v,
+          url: `${apiBase}/api/m3u8/filter?url=${encodeURIComponent(v.url)}`,
+        };
+      }
+    }
+    return v;
+  });
+
+  return c.json({ videos: cleanVideos });
 });
 
 // GET: Execute getImages inside sandbox (Manga)
@@ -390,7 +429,7 @@ app.get('/api/m3u8/filter', async (c) => {
 // Start server
 const port = process.env.PORT ? parseInt(process.env.PORT) : 3001;
 
-if (typeof Bun === 'undefined') {
+if (typeof Bun === 'undefined' && process.env.NODE_ENV !== 'test') {
   serve({
     fetch: app.fetch,
     port,
@@ -413,4 +452,3 @@ export default {
   port,
   fetch: app.fetch,
 };
-

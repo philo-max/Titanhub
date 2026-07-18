@@ -70,17 +70,33 @@ export default function AnimeDetailPage({ params }: { params: Promise<Params> })
         const currentPlugin = pluginsData.plugins?.find((p: any) => p.id === pluginId);
         if (currentPlugin && currentPlugin.providesVideo === false) {
           setProvidesVideo(false);
-          // Auto-search all video sources for this title (Kazumi SourceSheet pattern)
-          setCrossSourceLoading(true);
+        }
+        
+        // Always auto-search all video sources for this title so users can switch sources
+        setCrossSourceLoading(true);
           try {
             const searchRes = await fetch(`${API_BASE}/api/aggregate/search?q=${encodeURIComponent(detailData.detail.title)}&type=anime`);
             const searchData = await searchRes.json();
-            const items = (searchData.items || []).filter((item: any) => item.providesVideo !== false);
-            // Group by pluginName
-            const grouped: Record<string, Array<typeof items[0]>> = {};
-            for (const item of items) {
-              if (!grouped[item.pluginName]) grouped[item.pluginName] = [];
-              grouped[item.pluginName].push(item);
+            
+            // Find the exact matching group, fallback to first item
+            const normTarget = detailData.detail.title.replace(/[\s\-:：·]/g, '').toLowerCase();
+            const hubGroup = searchData.items?.find((item: any) => 
+              item.title.replace(/[\s\-:：·]/g, '').toLowerCase() === normTarget
+            ) || searchData.items?.[0];
+            const grouped: Record<string, Array<any>> = {};
+            
+            if (hubGroup && hubGroup.sources) {
+              const videoSources = hubGroup.sources.filter((s: any) => s.providesVideo);
+              for (const source of videoSources) {
+                if (!grouped[source.pluginName]) grouped[source.pluginName] = [];
+                grouped[source.pluginName].push({
+                  id: source.mediaId,
+                  title: hubGroup.title,
+                  cover: hubGroup.cover,
+                  pluginId: source.pluginId,
+                  pluginName: source.pluginName
+                });
+              }
             }
             setCrossSourceResults(grouped);
           } catch (e: any) {
@@ -88,7 +104,7 @@ export default function AnimeDetailPage({ params }: { params: Promise<Params> })
           } finally {
             setCrossSourceLoading(false);
           }
-        }
+          
         if (viewRecordedRef.current !== mediaId) {
           viewRecordedRef.current = mediaId;
           recordMediaView({

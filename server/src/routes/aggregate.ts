@@ -3,9 +3,50 @@ import { getPlugins, db } from '../db/db';
 import { mediaViews } from '../db/schema';
 import { desc, eq, sql } from 'drizzle-orm';
 import { PluginManager } from '../plugins/manager';
-import type { AggregatedMediaItem, MediaType } from '@titanhub/plugin-types';
+import type { AggregatedMediaItem, MediaType, HubMediaGroup, HubMediaSource } from '@titanhub/plugin-types';
 
 const aggregate = new Hono();
+
+// Helper to group items by title
+function groupMediaItems(perPluginItems: AggregatedMediaItem[][]): HubMediaGroup[] {
+  const map = new Map<string, HubMediaGroup>();
+  
+  for (const list of perPluginItems) {
+    for (const item of list) {
+      const normTitle = item.title.replace(/[\s\-:：·]/g, '').toLowerCase();
+      
+      const source: HubMediaSource = {
+        pluginId: item.pluginId,
+        pluginName: item.pluginName,
+        mediaId: item.id,
+        providesVideo: item.providesVideo || false,
+        isMetadata: !(item.providesVideo || false)
+      };
+
+      if (!map.has(normTitle)) {
+        map.set(normTitle, {
+          id: normTitle,
+          title: item.title,
+          cover: item.cover,
+          description: item.description,
+          mediaType: item.mediaType,
+          sources: [source]
+        });
+      } else {
+        const group = map.get(normTitle)!;
+        group.sources.push(source);
+        if (source.isMetadata && !group.sources.some(s => s !== source && s.isMetadata)) {
+          group.title = item.title;
+          if (item.cover) group.cover = item.cover;
+          if (item.description) group.description = item.description;
+        } else if (!group.cover && item.cover) {
+          group.cover = item.cover;
+        }
+      }
+    }
+  }
+  return Array.from(map.values());
+}
 
 const MEDIA_TYPES: MediaType[] = ['anime', 'manga', 'novel', 'movie'];
 const PLUGIN_TIMEOUT_MS = 8000;
@@ -59,15 +100,7 @@ aggregate.get('/home', async (c) => {
       })
     );
 
-    // Interleave results so no single source dominates the top of the grid
-    const allItems: AggregatedMediaItem[] = [];
-    const max = Math.max(0, ...perPlugin.map((l) => l.length));
-    for (let i = 0; i < max; i++) {
-      for (const list of perPlugin) {
-        if (list[i]) allItems.push(list[i]);
-      }
-    }
-
+    const allItems = groupMediaItems(perPlugin);
     const total = allItems.length;
     const start = (page - 1) * pageSize;
     const items = allItems.slice(start, start + pageSize);
@@ -126,14 +159,7 @@ aggregate.get('/search', async (c) => {
       })
     );
 
-    // Interleave results so no single source dominates the top of the list
-    const items: AggregatedMediaItem[] = [];
-    const max = Math.max(0, ...perPlugin.map((l) => l.length));
-    for (let i = 0; i < max; i++) {
-      for (const list of perPlugin) {
-        if (list[i]) items.push(list[i]);
-      }
-    }
+    const items = groupMediaItems(perPlugin);
 
     return c.json({ items, sources: eligible.map((p) => ({ id: p.id, name: p.name })) });
   } catch (err: any) {

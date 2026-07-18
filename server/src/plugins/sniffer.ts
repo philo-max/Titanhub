@@ -21,10 +21,17 @@ export class PlaywrightSniffer {
 
   private static async getBrowser(): Promise<Browser> {
     if (!this.browser) {
-      this.browser = await chromium.launch({
+      const launchOptions: any = {
         headless: true,
         args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu'],
-      });
+      };
+      
+      const proxyUrl = process.env.PROXY_URL || process.env.HTTP_PROXY || process.env.HTTPS_PROXY;
+      if (proxyUrl) {
+        launchOptions.proxy = { server: proxyUrl };
+      }
+
+      this.browser = await chromium.launch(launchOptions);
     }
     return this.browser;
   }
@@ -120,11 +127,19 @@ export class PlaywrightSniffer {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000);
-      const res = await fetch(urlStr, {
+      const fetchOptions: any = {
         method: 'HEAD',
         signal: controller.signal,
         headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
-      });
+      };
+
+      const proxyUrl = process.env.PROXY_URL || process.env.HTTP_PROXY || process.env.HTTPS_PROXY;
+      if (proxyUrl) {
+        const { ProxyAgent } = require('undici');
+        fetchOptions.dispatcher = new ProxyAgent(proxyUrl);
+      }
+
+      const res = await fetch(urlStr, fetchOptions);
       clearTimeout(timeoutId);
       const ct = (res.headers.get('content-type') || '').toLowerCase();
 
@@ -223,6 +238,7 @@ export class PlaywrightSniffer {
         const reqUrl = request.url();
         if (this.isAdUrl(reqUrl)) return;
         const kind = this.classifyVideoUrl(reqUrl);
+        if (kind) console.log(`[Sniffer] Request matched by path (${kind}):`, reqUrl);
         if (kind === 'manifest') {
           if (!manifestUrl) manifestUrl = reqUrl;
         } else if (kind === 'file' && !mediaFileUrl) {
@@ -250,9 +266,11 @@ export class PlaywrightSniffer {
           contentType.includes('application/x-mpegURL') ||
           contentType.includes('application/vnd.apple.mpegurl')
         ) {
+          console.log(`[Sniffer] Response matched by Content-Type (manifest):`, resUrl);
           manifestUrl = resUrl;
           manifestVerified = true;
         } else if (contentType.startsWith('video/')) {
+          console.log(`[Sniffer] Response matched by Content-Type (video):`, resUrl);
           if (!mediaFileUrl) {
             mediaFileUrl = resUrl;
             mediaFileVerified = true;
@@ -261,7 +279,8 @@ export class PlaywrightSniffer {
       });
 
       // Navigate to page
-      page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => {});
+      console.log(`[Sniffer] Navigating to:`, url);
+      page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20000 }).catch(e => console.log(`[Sniffer] goto error:`, e));
 
       // Poll until any video URL (manifest or direct file) is found or
       // timeout is reached, periodically nudging players that wait for a
@@ -282,22 +301,35 @@ export class PlaywrightSniffer {
         }
       }
 
+      if (!manifestUrl && !mediaFileUrl) {
+        console.log(`[Sniffer] Timeout reached for:`, url);
+        throw new Error(`Sniffer timeout: Could not find video stream for '${url}'`);
+      }
+
       // Return the first available candidate. URLs captured via response
       // events are already verified (Playwright saw the actual Content-Type).
       // URLs captured via request events only (URL-path heuristic) get a
       // HEAD verification as a safety check.
-      if (manifestUrl) {
-        const final = manifestVerified ? manifestUrl : await this.verifyVideoUrl(manifestUrl);
-        if (final) {
-          sniffCache.set(url, { url: final, expiresAt: Date.now() + SNIFF_CACHE_TTL_MS });
-          return final;
-        }
-      }
-      if (mediaFileUrl) {
-        const final = mediaFileVerified ? mediaFileUrl : await this.verifyVideoUrl(mediaFileUrl);
-        if (final) {
-          sniffCache.set(url, { url: final, expiresAt: Date.now() + SNIFF_CACHE_TTL_MS });
-          return final;
+      
+      const candidates = [
+        { url: manifestUrl, verified: manifestVerified },
+        { url: mediaFileUrl, verified: mediaFileVerified }
+      ];
+
+      for (const { url: finalUrl, verified } of candidates) {
+        if (finalUrl) {
+          console.log(`[Sniffer] Found video URL:`, finalUrl);
+          if (!verified) {
+            console.log(`[Sniffer] Verifying URL with HEAD request:`, finalUrl);
+            const verifiedUrl = await this.verifyVideoUrl(finalUrl);
+            if (!verifiedUrl) {
+              console.log(`[Sniffer] Verification failed (likely image), continuing...`);
+              continue;
+            }
+          }
+          
+          sniffCache.set(url, { url: finalUrl, expiresAt: Date.now() + 1000 * 60 * 60 });
+          return finalUrl;
         }
       }
 

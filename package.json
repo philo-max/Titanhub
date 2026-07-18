@@ -17,5 +17,8 @@
     "eslint": "^8.57.0",
     "prettier": "^3.1.1",
     "turbo": "^2.0.4"
+  },
+  "dependencies": {
+    "cheerio": "^1.2.0"
   }
 }
