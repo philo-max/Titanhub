@@ -90,10 +90,11 @@ jobs:
           }
           EOF
 
-          # Limit Gradle memory to prevent OOM kills on CI runner
-          echo "org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m" >> android/gradle.properties
+          # Gradle memory: 4GB heap + 1GB metaspace — CI runner has 7GB RAM
+          echo "org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m -XX:+HeapDumpOnOutOfMemoryError" >> android/gradle.properties
           echo "kotlin.incremental=false" >> android/gradle.properties
           echo "org.gradle.daemon=false" >> android/gradle.properties
+          echo "org.gradle.workers.max=2" >> android/gradle.properties
           echo "kotlin.compiler.execution.strategy=in-process" >> android/gradle.properties
 
           flutter pub get
@@ -103,18 +104,38 @@ jobs:
       - name: Build APK
         run: |
           cd apps/mobile
-          flutter build apk --release --verbose
+          flutter build apk --release --verbose 2>&1 | tee build-output.log
+          echo "=== Build exit code: $? ==="
+
+      - name: Diagnose APK output location
+        if: always()
+        run: |
+          echo "=== All .apk files under build/ ==="
+          find apps/mobile/build -name '*.apk' -type f 2>/dev/null || echo "No APKs found"
+          echo "=== Contents of flutter-apk/ ==="
+          ls -la apps/mobile/build/app/outputs/flutter-apk/ 2>/dev/null || echo "flutter-apk dir not found"
+          echo "=== Contents of apk/ ==="
+          ls -la apps/mobile/build/app/outputs/apk/release/ 2>/dev/null || echo "apk/release dir not found"
+          echo "=== Last 50 lines of build log ==="
+          tail -50 apps/mobile/build-output.log 2>/dev/null || true
 
       - name: Rename APKs
         run: |
-          cd apps/mobile/build/app/outputs/flutter-apk
-          mv app-release.apk Titanhub-${{ github.ref_name || 'debug' }}-android.apk
+          # Search for any .apk file — Flutter may output to flutter-apk/ or apk/release/
+          APK_PATH=$(find apps/mobile/build -name '*.apk' -type f | head -1)
+          if [ -z "$APK_PATH" ]; then
+            echo "ERROR: No APK file found in build output"
+            exit 1
+          fi
+          echo "Found APK at: $APK_PATH"
+          cp "$APK_PATH" "Titanhub-${{ github.ref_name || 'debug' }}-android.apk"
+          ls -la Titanhub-*.apk
 
       - name: Upload Android Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: android-builds
-          path: apps/mobile/build/app/outputs/flutter-apk/Titanhub-*.apk
+          path: Titanhub-*.apk
 
   build-windows:
     name: Build Windows App
