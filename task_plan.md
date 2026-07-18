@@ -11,3 +11,7 @@
 - [x] 阶段 3：重构移动端数据获取逻辑为本地/云端双通道混合模式
 - [x] 阶段 4：配置云端部署生态（如 Docker/Vercel/CF Workers 一键配置）
 - [ ] 阶段 5：全端自动化编译与双通道自主运行可用性测试
+- [ ] 阶段 6：统一聚合引擎重构 (Metadata-First + Multi-Source)
+  - [x] 6.1 定义新的统一数据结构 (HubMediaGroup)，并在 `plugin-types` 中更新。
+  - [x] 6.2 重构 `server/src/routes/aggregate.ts` 以支持根据 Title 聚合多插件数据源。
+  - [x] 6.3 调整前端 UI 以接收聚合数据格式，添加详情页多源切换支持。
