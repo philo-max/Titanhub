@@ -7,8 +7,9 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Web-Next.js%2015-black?logo=next.js" alt="Next.js" />
   <img src="https://img.shields.io/badge/Mobile-Flutter%203-blue?logo=flutter" alt="Flutter" />
-  <img src="https://img.shields.io/badge/API-Hono%20%2B%20Bun-orange?logo=bon" alt="Hono" />
-  <img src="https://img.shields.io/badge/DB-PostgreSQL%20%2B%20Drizzle%20ORM-blue?logo=postgresql" alt="PostgreSQL" />
+  <img src="https://img.shields.io/badge/Desktop-Electron%2034-blue?logo=electron" alt="Electron" />
+  <img src="https://img.shields.io/badge/API-Hono%20%2B%20Node.js-orange?logo=hono" alt="Hono" />
+  <img src="https://img.shields.io/badge/DB-SQLite%20%2F%20PostgreSQL-blue?logo=sqlite" alt="SQLite / PostgreSQL" />
   <img src="https://img.shields.io/badge/Monorepo-Turborepo%20%2B%20pnpm-179297?logo=turborepo" alt="Turborepo" />
   <img src="https://img.shields.io/badge/License-MIT-green" alt="MIT" />
 </p>
@@ -19,9 +20,10 @@
 
 Titanhub 是一个面向 ACG 内容消费者的跨平台聚合平台。用户无需在多个应用间切换，一个 App 即可搜索、浏览、阅读和播放来自不同数据源（番剧、漫画、轻小说、影视）的内容，并支持跨设备追番进度同步。
 
-项目采用 **Turborepo monorepo** 架构，包含三个核心子工程：
+项目采用 **Turborepo monorepo** 架构，包含四个核心子工程：
 
 - **Web 前端** — Next.js 15 (App Router) + React 19 + Tailwind CSS v4 + GSAP 动效
+- **Windows 桌面端** — Electron 34，内置 Web 前端与 API 服务，SQLite 保存本地资料，可选 WebDAV 手动同步
 - **移动端** — Flutter 3 (Riverpod + Drift 本地数据库 + media_kit 播放器)
 - **API 后端** — Hono (Bun/Node.js 双运行时) + Drizzle ORM + PostgreSQL
 
@@ -57,18 +59,20 @@ Web 端内容卡片实现了 144Hz 锁帧的 GPU 加速 3D 悬停倾斜效果（
 
 内置弹幕路由（`/danmaku`），支持弹幕获取、发送和增强过滤。
 
-## 📥 客户端下载与使用指南 (v1.0.0)
+## 📥 客户端下载与使用指南 (v1.0.7)
 
-本项目已配置 **GitHub Actions** 自动化编译打包管线，您可以通过 [GitHub Releases (v1.0.0)](https://github.com/philo-max/Titanhub/releases/tag/v1.0.0) 下载对应平台编译好的本地程序：
+当前已发布 [Titanhub v1.0.7](https://github.com/philo-max/Titanhub/releases/tag/v1.0.7)，本次附件为 **Windows x64 Electron 安装包**：
 
-*   **Android 端 (APK)**：支持主流 Android 手机，提供不同架构（arm64-v8a, armeabi-v7a）的 release APK。
-*   **Windows 桌面端 (EXE)**：Electron 正式桌面产物是 `Titanhub-Setup-<version>-x64.exe` 安装向导，支持选择目录、快捷方式、系统卸载；现有 Flutter ZIP 为独立产物；安装包可通过下方命令本地构建，下载时请以 Releases 实际附件为准。
-*   **iOS 苹果端 (IPA)**：提供未签名的 release IPA 包，可供越狱/签名侧载测试。
+1. 下载 [Titanhub-Setup-1.0.7-x64.exe](https://github.com/philo-max/Titanhub/releases/download/v1.0.7/Titanhub-Setup-1.0.7-x64.exe)。
+2. 如已运行旧版，先正常退出程序，再运行安装向导；支持选择安装目录、创建快捷方式和系统卸载。
+3. 安装后直接打开，无需注册、安装 Node.js/PostgreSQL 或手动启动后端，即可使用本地收藏与观看、阅读进度。
+
+Android、iOS 与 Flutter Windows 是独立构建目标，**v1.0.7 未提供这些平台的附件**。需要自行构建时，请参阅下方开发说明；后续下载以 [Releases](https://github.com/philo-max/Titanhub/releases) 实际附件为准。
 
 > [!TIP]
 > **本地联调与后端连接配置：**
 > 
-> 由于本应用为聚合门户客户端，需要与您的 Hono API 后端服务通信。
+> Electron 已内置 API 服务；独立 Web 和 Flutter 客户端的开发联调需要配置后端连接。
 > 1. **Windows 桌面端**：Electron 安装后直接启动，内置运行环境，无需用户另行安装 Node/PostgreSQL 或手动启动后端；旧 Flutter ZIP 仍按其服务器配置使用。
 > 2. **Android 手机客户端**：
 >    *   **模拟器**：默认路由到 `http://10.0.2.2:3001` 访问主机的本地服务。
@@ -76,9 +80,9 @@ Web 端内容卡片实现了 144Hz 锁帧的 GPU 加速 3D 悬停倾斜效果（
 
 ## Windows 本地资料与可选 WebDAV
 
-Windows 新安装或旧版升级建议使用 1.0.3 或更新版本：1.0.1 修复安装后无法启动，1.0.2 处理旧版升级时因备份路径过长而误报“无法关闭”，1.0.3 修复安装包中的来源脚本引擎及 TUN fake-IP 环境下的来源网络请求。修复包当前为本地构建，尚未更新 GitHub 发布附件；升级前先正常退出旧程序，无需清空本地资料。
+Windows 新安装或旧版升级请使用已发布的 **1.0.7** 安装包。升级前先正常退出旧程序，无需清空本地资料；默认卸载也会保留用户资料。
 
-首页、搜索和排行推荐已排除内置演示来源；部分来源失败时仍显示有效结果，可展开查看失败来源。Bangumi 提供番剧资料，不提供视频播放源，其他来源的播放和阅读能力仍需逐个适配、验证。fake-IP 兼容目前覆盖来源 HTTP 请求；该模式下的视频嗅探、m3u8 代理、纯 IPv6 来源，以及同时设置显式 HTTP 代理的组合尚不支持。
+首页、搜索和排行推荐已排除内置演示来源；部分来源失败时仍显示有效结果，可展开查看失败来源。Bangumi 提供番剧资料，不提供视频播放源，其他来源的播放和阅读能力仍需逐个适配、验证。来源可用性受站点规则与网络环境影响，搜索到内容不代表一定可以播放或阅读。
 
 安装并打开 Electron 客户端后，无需注册即可收藏内容并保存观看、阅读进度；右上角「本地资料」可查看记录。正常退出会先保存最后进度，若保存失败，请按提示重试。
 
@@ -116,6 +120,10 @@ Titanhub/
 │   │   │   ├── stores/          # Zustand 状态管理
 │   │   │   └── lib/             # 工具函数与 GSAP 动画配置
 │   │   └── package.json
+│   ├── desktop/                 # Electron Windows 客户端
+│   │   ├── src/main/            # 窗口、内置服务、本地会话与 WebDAV
+│   │   ├── src/preload/         # 桌面桥接接口
+│   │   └── package.json         # 版本与 NSIS 安装包配置
 │   └── mobile/                  # Flutter 移动端
 │       ├── lib/
 │       │   ├── core/            # 路由、数据库、主题
@@ -148,17 +156,20 @@ Titanhub/
 | 样式 | Tailwind CSS v4 + GSAP 3 动画 |
 | 状态管理 | Zustand (Web) / Riverpod (Flutter) |
 | 移动端 | Flutter 3 + Dart + go_router + Drift (SQLite) |
+| Windows 桌面端 | Electron 34 + electron-builder (NSIS x64) |
 | API 框架 | Hono + tsx (Node) / Bun 双运行时 |
 | ORM | Drizzle ORM (type-safe schema → PostgreSQL migrations) |
-| 数据库 | PostgreSQL 15 (Docker) |
-| 认证 | JWT (bcryptjs 密码哈希) |
+| 数据库 | SQLite (Electron 本地资料) / PostgreSQL 15 (独立服务) |
+| 认证 | Electron 本地会话 / JWT (独立服务，bcryptjs 密码哈希) |
 | 插件引擎 | quickjs-emscripten (Wasm sandbox) + cheerio + xpath |
 | 播放器 | HLS.js (Web) / media_kit (Flutter) |
 | Monorepo | Turborepo + pnpm workspaces |
 | CI/CD | GitHub Actions (Lint → Test → TypeCheck → Android APK build) |
-| 测试 | Vitest (Web/Server) / flutter_test (Mobile) |
+| 测试 | Vitest (Web/Server/Desktop) / flutter_test (Mobile) |
 
 ## 快速开始
+
+以下为源码开发流程。只使用 Windows 客户端时，下载安装包即可，无需准备这些环境。
 
 ### 前置要求
 
@@ -223,6 +234,7 @@ Titanhub 的核心竞争力在于可扩展的插件架构。每个插件是一�
 
 - `apps/web` — 基于 Next.js 15 App Router 的 SPA，包含番剧/漫画/轻小说/影视四大内容模块的完整页面、GSAP 动画引擎、HLS 播放器和弹幕层。
 - `apps/mobile` — Flutter 跨端客户端，使用 Riverpod 状态管理 + Drift 本地持久化 + media_kit 原生播放，支持 Android/iOS/桌面。
+- `apps/desktop` — Electron Windows 客户端，管理内置服务、本地会话、WebDAV 凭据与 NSIS 安装包。
 - `server` — 轻量 Hono API，提供聚合搜索、JWT 认证、追番同步、弹幕 CRUD，通过 Drizzle ORM 管理 PostgreSQL。
 - `packages/` — Monorepo 共享包，包含插件类型定义、跨运行时适配器和统一主题 token。
 - `docs/` — 设计文档（Titanhub-Design.md）、插件开发指南、迭代记录。
