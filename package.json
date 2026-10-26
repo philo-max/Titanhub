@@ -4,6 +4,11 @@
   "packageManager": "pnpm@9.0.0",
   "scripts": {
     "dev": "turbo run dev",
+    "desktop": "pnpm --filter titanhub-desktop dev",
+    "package:prepare": "pnpm --filter @titanhub/plugin-adapter build && pnpm --filter titanhub-server build && pnpm --filter titanhub-web build && pnpm --filter titanhub-desktop build",
+    "package:desktop": "pnpm package:prepare && pnpm --filter titanhub-desktop package:installer",
+    "package:desktop:dir": "pnpm package:prepare && pnpm --filter titanhub-desktop package",
+    "package:desktop:portable": "pnpm package:prepare && pnpm --filter titanhub-desktop package:portable",
     "build": "turbo run build",
     "test": "turbo run test",
     "lint": "turbo run lint",

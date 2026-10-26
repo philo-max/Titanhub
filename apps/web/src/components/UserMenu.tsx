@@ -5,13 +5,16 @@ import Link from 'next/link';
 import { User as UserIcon, LogOut, History, Settings, Blocks } from 'lucide-react';
 import { useAuthStore } from '../stores/authStore';
 import AuthModal from './AuthModal';
+import { useLocalSessionStore } from '@/stores/localSessionStore';
 
 export default function UserMenu() {
   const { user, logout } = useAuthStore();
+  const localMode = useLocalSessionStore((state) => state.status !== 'idle');
+  const displayName = localMode ? '本地资料' : user?.username || '';
   const [modalOpen, setModalOpen] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
-  if (!user) {
+  if (!user && !localMode) {
     return (
       <>
         <button
@@ -33,18 +36,18 @@ export default function UserMenu() {
         className="flex items-center space-x-2 bg-surface/80 backdrop-blur-md border border-border px-1.5 py-1.5 pr-4 rounded-full hover:bg-surfaceLight hover:shadow-lg transition-all"
       >
         <div className="h-8 w-8 rounded-full bg-gradient-to-tr from-primary to-accent flex items-center justify-center text-white font-bold shadow-inner">
-          {user.username.charAt(0).toUpperCase()}
+          {displayName.charAt(0).toUpperCase()}
         </div>
         <span className="text-sm font-bold text-textPrimary max-w-[100px] truncate">
-          {user.username}
+          {displayName}
         </span>
       </button>
 
       {dropdownOpen && (
         <div className="absolute top-14 right-0 w-48 bg-surface border border-border rounded-2xl shadow-xl overflow-hidden animate-fade-in origin-top-right">
           <div className="p-4 border-b border-border">
-            <p className="text-xs text-textSecondary font-medium">当前账号</p>
-            <p className="text-sm text-textPrimary font-bold truncate">{user.username}</p>
+            <p className="text-xs text-textSecondary font-medium">{localMode ? '当前设备' : '当前账号'}</p>
+            <p className="text-sm text-textPrimary font-bold truncate">{displayName}</p>
           </div>
           <Link
             href="/tracking"
@@ -70,7 +73,7 @@ export default function UserMenu() {
             <Settings className="h-4 w-4 mr-2 text-primary" />
             设置
           </Link>
-          <button
+          {!localMode && <button
             onClick={() => {
               logout();
               setDropdownOpen(false);
@@ -79,7 +82,7 @@ export default function UserMenu() {
           >
             <LogOut className="h-4 w-4 mr-2" />
             退出登录
-          </button>
+          </button>}
         </div>
       )}
     </div>

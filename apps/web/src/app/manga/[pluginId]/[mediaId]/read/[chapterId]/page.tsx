@@ -1,7 +1,6 @@
 'use client';
 
 import React, { use, useEffect, useState, useRef, useCallback } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { animateMangaPageTransition } from '@/lib/animations';
 import {
@@ -13,7 +12,8 @@ import {
   Menu,
   Loader2,
 } from 'lucide-react';
-import { useSyncStore } from '@/stores/syncStore';
+import { useSyncStore, type TrackingLog } from '@/stores/syncStore';
+import { findResumeLog, mangaResumePage } from '@/lib/resume-position';
 import { API_BASE } from '@/lib/config';
 import { playbackCache } from '@/lib/playbackCache';
 
@@ -148,6 +148,11 @@ function LazyMangaImage({
 }
 
 export default function MangaReaderPage({ params }: { params: Promise<Params> }) {
+  const identity = use(params);
+  return <MangaReaderPageContent key={JSON.stringify(identity)} params={params} />;
+}
+
+function MangaReaderPageContent({ params }: { params: Promise<Params> }) {
   const { pluginId, mediaId, chapterId } = use(params);
   const router = useRouter();
 
@@ -164,7 +169,30 @@ export default function MangaReaderPage({ params }: { params: Promise<Params> })
   const [zoomLevel, setZoomLevel] = useState(100); // percentage
 
   const { saveProgress } = useSyncStore();
+  const [resume, setResume] = useState<TrackingLog>();
+  const [resumeReady, setResumeReady] = useState(false);
+  const [restored, setRestored] = useState(false);
+  const [progressError, setProgressError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    void useSyncStore.getState().pullTracking().then(() => {
+      if (cancelled) return;
+      setResume(findResumeLog(useSyncStore.getState().trackingList, {
+        mediaType: 'manga', pluginId, mediaId, chapterId,
+      }));
+      setResumeReady(true);
+    }).catch(() => {
+      if (!cancelled) {
+        setError('读取阅读进度失败，请重新打开本章。');
+        setResumeReady(true);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [pluginId, mediaId, chapterId]);
   const imageContainerRef = useRef<HTMLDivElement>(null);
+  const currentPageRef = useRef(currentPage);
+  currentPageRef.current = currentPage;
 
   // Fetch images and chapters
   useEffect(() => {
@@ -215,9 +243,52 @@ export default function MangaReaderPage({ params }: { params: Promise<Params> })
     fetchReaderData();
   }, [pluginId, mediaId, chapterId]);
 
+  useEffect(() => {
+    if (loading || !resumeReady || restored || images.length === 0) return;
+    setCurrentPage(mangaResumePage(resume, images.length));
+    setRestored(true);
+  }, [loading, resumeReady, restored, images.length, resume]);
+
+  useEffect(() => {
+    if (!restored || mode !== 'vertical') return;
+    const container = imageContainerRef.current;
+    const target = container?.children[currentPageRef.current];
+    if (!container || !target) return;
+    let anchoring = true;
+    let frame = 0;
+    const alignPage = () => {
+      if (!anchoring) return;
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => target.scrollIntoView({ block: 'start', behavior: 'instant' }));
+    };
+    const stopAnchoring = () => { anchoring = false; cancelAnimationFrame(frame); };
+    const observer = new ResizeObserver(alignPage);
+    observer.observe(container);
+    alignPage();
+    const events = ['wheel', 'touchstart', 'pointerdown', 'keydown'] as const;
+    events.forEach((event) => window.addEventListener(event, stopAnchoring, { passive: true }));
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+      events.forEach((event) => window.removeEventListener(event, stopAnchoring));
+    };
+  }, [restored, mode]);
+
+  useEffect(() => {
+    if (!restored || mode !== 'vertical') return;
+    const handleScroll = () => {
+      const pages = imageContainerRef.current?.children;
+      if (!pages) return;
+      const index = Array.from(pages).findIndex((page) => page.getBoundingClientRect().bottom > 0);
+      if (index >= 0) setCurrentPage(index);
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [restored, mode]);
+
   // Save progress progress synchronization
   useEffect(() => {
-    if (images.length > 0) {
+    if (restored && images.length > 0) {
       saveProgress({
         mediaId,
         pluginId,
@@ -225,10 +296,11 @@ export default function MangaReaderPage({ params }: { params: Promise<Params> })
         chapterNo: chapters.find((c) => c.id === chapterId)?.chapterNo ?? 1,
         chapterId,
         progress: (currentPage + 1) / images.length,
+        position: currentPage,
         status: 'watching',
-      });
+      }).catch(() => setProgressError('保存阅读进度失败，请稍后重试。'));
     }
-  }, [currentPage, images.length, mediaId, pluginId, chapterId, chapters, saveProgress]);
+  }, [restored, currentPage, images.length, mediaId, pluginId, chapterId, chapters, saveProgress]);
 
   // Centralized transition when changing pages in Horizontal Mode
   const prevPageRef = useRef(currentPage);
@@ -280,7 +352,7 @@ export default function MangaReaderPage({ params }: { params: Promise<Params> })
     };
   }, [sidebarOpen, handleNextPage, handlePrevPage]);
 
-  if (loading) {
+  if (loading || !resumeReady) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center text-textSecondary">
         <Loader2 className="h-10 w-10 text-violet-500 animate-spin mb-4" />
@@ -308,6 +380,7 @@ export default function MangaReaderPage({ params }: { params: Promise<Params> })
 
   return (
     <div className="min-h-screen bg-background text-textPrimary flex flex-col relative overflow-hidden font-sans select-none">
+      {progressError && <p role="alert" className="text-rose-500">{progressError}</p>}
       {/* Top toolbar */}
       <header className="z-40 flex justify-between items-center bg-background/80 backdrop-blur-md border-b border-borderSubtle px-6 py-4">
         <div className="flex items-center space-x-4">

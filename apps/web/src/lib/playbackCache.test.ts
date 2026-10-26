@@ -54,6 +54,30 @@ describe('playbackCache unit tests', () => {
     vi.unstubAllGlobals();
   });
 
+  it('should keep a single prefetch in flight so a clicked chapter is not queued behind hover prefetches', async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (url.includes('/video/')) {
+        return gate.then(() => ({ json: () => Promise.resolve({ videos: [{ quality: '1080P', url: 'http://example.com/a.mp4' }] }) }));
+      }
+      return Promise.resolve({ json: () => Promise.resolve({ comments: [] }) });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const first = playbackCache.prefetch('plugin-1', 'media-1', 'chapter-1', 'anime');
+    await playbackCache.prefetch('plugin-1', 'media-1', 'chapter-2', 'anime');
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('/video/'))).toHaveLength(1);
+    expect(playbackCache.get('plugin-1', 'chapter-2')).toBeNull();
+
+    release();
+    await first;
+    await playbackCache.prefetch('plugin-1', 'media-1', 'chapter-2', 'anime');
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('/video/'))).toHaveLength(2);
+
+    vi.unstubAllGlobals();
+  });
+
   it('should fetch and cache manga images on prefetch with mediaType manga', async () => {
     const mockImages = { images: ['http://example.com/p1.jpg', 'http://example.com/p2.jpg'] };
 

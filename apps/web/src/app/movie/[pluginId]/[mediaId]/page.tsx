@@ -3,6 +3,7 @@
 import React, { use, useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import SmartImage from '@/components/SmartImage';
+import FavoriteButton from '@/components/FavoriteButton';
 import { useRouter } from 'next/navigation';
 import {
   animateDetailPageEntrance,
@@ -204,6 +205,7 @@ export default function MovieDetailPage({ params }: { params: Promise<Params> })
               <h1 className="animate-fade-in text-3xl sm:text-4xl font-extrabold tracking-tight mb-4 bg-gradient-to-r from-white via-textPrimary to-textSecondary bg-clip-text text-transparent">
                 {detail.title}
               </h1>
+              <FavoriteButton mediaType="movie" pluginId={pluginId} mediaId={mediaId} />
 
               {/* Badges */}
               <div className="animate-fade-in flex flex-wrap gap-2 mb-6">

@@ -1,0 +1,65 @@
+{
+  "name": "titanhub-desktop",
+  "version": "1.0.7",
+  "private": true,
+  "main": "dist/main/index.js",
+  "scripts": {
+    "dev": "tsc && electron .",
+    "build": "tsc",
+    "package": "tsc && npx electron-builder --win --dir",
+    "package:installer": "tsc && electron-builder --win nsis --x64",
+    "package:portable": "tsc && npx electron-builder --win portable",
+    "start": "electron .",
+    "lint": "eslint src",
+    "test": "vitest run --fileParallelism=false"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "electron": "^34.2.0",
+    "electron-builder": "^25.1.8",
+    "typescript": "^5.0.0",
+    "vitest": "^1.6.0"
+  },
+  "build": {
+    "appId": "com.titanhub.desktop",
+    "productName": "Titanhub",
+    "asar": false,
+    "directories": {
+      "output": "build-out"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../../server/dist",
+        "to": "server/dist"
+      },
+      {
+        "from": "../../apps/web/standalone",
+        "to": "apps/web/standalone"
+      }
+    ],
+    "win": {
+      "target": [
+        "dir",
+        "portable",
+        "nsis"
+      ],
+      "icon": "../web/public/icon-512.png",
+      "signAndEditExecutable": true
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Titanhub",
+      "include": "build/installer.nsh",
+      "artifactName": "Titanhub-Setup-${version}-${arch}.${ext}"
+    }
+  }
+}

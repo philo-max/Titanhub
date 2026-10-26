@@ -128,3 +128,29 @@ export const plugins = pgTable('plugins', {
   isActive: boolean('is_active').default(true).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
+
+// Watch/Read History Table
+export const history = pgTable(
+  'history',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    userId: uuid('user_id')
+      .references(() => users.id, { onDelete: 'cascade' })
+      .notNull(),
+    mediaType: mediaTypeEnum('media_type').notNull(),
+    mediaId: varchar('media_id', { length: 255 }).notNull(),
+    pluginId: varchar('plugin_id', { length: 255 }).notNull(),
+    chapterId: varchar('chapter_id', { length: 255 }).default('').notNull(),
+    chapterNo: integer('chapter_no').default(0).notNull(),
+    title: varchar('title', { length: 512 }),
+    cover: text('cover'),
+    progress: doublePrecision('progress').default(0.0).notNull(),
+    watchedAt: timestamp('watched_at').defaultNow().notNull(),
+  },
+  (table) => {
+    return [
+      // One history row per user + media + chapter; rewatching refreshes it
+      unique('user_media_chapter_history_unique').on(table.userId, table.mediaId, table.chapterId),
+    ];
+  }
+);

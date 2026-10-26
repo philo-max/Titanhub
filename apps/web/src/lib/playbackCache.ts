@@ -22,6 +22,11 @@ const cache = new Map<string, CachedPlaybackData>();
 // Keep cache entries for up to 10 minutes (600,000ms)
 const CACHE_TTL = 10 * 60 * 1000;
 
+// Each anime prefetch starts a server-side video sniff and the server only runs a couple at once,
+// so keep a single prefetch in flight and leave the slots free for the chapter the user clicks.
+const MAX_CONCURRENT_PREFETCH = 1;
+let activePrefetches = 0;
+
 function getCacheKey(pluginId: string, chapterId: string): string {
   return `${pluginId}:${chapterId}`;
 }
@@ -41,6 +46,9 @@ export const playbackCache = {
         return;
       }
     }
+
+    if (activePrefetches >= MAX_CONCURRENT_PREFETCH) return;
+    activePrefetches++;
 
     try {
       if (mediaType === 'manga') {
@@ -68,6 +76,8 @@ export const playbackCache = {
       }
     } catch (err) {
       console.warn(`[PlaybackCache] Prefetch failed for ${mediaType} chapter ${chapterId}:`, err);
+    } finally {
+      activePrefetches--;
     }
   },
 
@@ -87,6 +97,13 @@ export const playbackCache = {
     }
     
     return entry;
+  },
+
+  /**
+   * Stores playback data resolved elsewhere, e.g. by a source fallback
+   */
+  set(pluginId: string, chapterId: string, data: Omit<CachedPlaybackData, 'timestamp'>): void {
+    cache.set(getCacheKey(pluginId, chapterId), { ...data, timestamp: Date.now() });
   },
 
   /**

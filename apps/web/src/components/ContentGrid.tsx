@@ -3,9 +3,8 @@
 import React, { useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { Loader2 } from 'lucide-react';
-import type { MediaType, HubMediaGroup } from '@titanhub/plugin-types';
 import MediaCard from './MediaCard';
-import { useHomeStore } from '../stores/homeStore';
+import { AggregationSource, useHomeStore } from '../stores/homeStore';
 import { animateEntranceStagger } from '../lib/animations';
 
 function detailHref(item: any): string | null {
@@ -18,12 +17,26 @@ function detailHref(item: any): string | null {
   return `/${item.mediaType}/${defaultSource.pluginId}/${defaultSource.mediaId}`;
 }
 
+function SourceFailures({ sources }: { sources: AggregationSource[] }) {
+  const failures = sources.filter(source => source.status === 'error' || source.status === 'timeout');
+  if (failures.length === 0) return null;
+  return (
+    <details className="text-sm text-textSecondary mb-4">
+      <summary className="cursor-pointer">{failures.length} 个来源加载失败</summary>
+      <ul className="mt-2 space-y-1">
+        {failures.map(source => <li key={source.id}>{source.name}：{source.message || (source.status === 'timeout' ? '请求超时' : '加载失败')}</li>)}
+      </ul>
+    </details>
+  );
+}
+
 export default function ContentGrid() {
   const activeCategory = useHomeStore((state) => state.activeCategory);
   const items = useHomeStore((state) => state.items);
   const loading = useHomeStore((state) => state.loading);
   const loadingMore = useHomeStore((state) => state.loadingMore);
   const error = useHomeStore((state) => state.error);
+  const sources = useHomeStore((state) => state.sources);
   const hasMore = useHomeStore((state) => state.hasMore);
   const fetchCategory = useHomeStore((state) => state.fetchCategory);
   const loadMore = useHomeStore((state) => state.loadMore);
@@ -31,8 +44,8 @@ export default function ContentGrid() {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    fetchCategory(activeCategory);
-  }, [activeCategory, fetchCategory]);
+    fetchCategory(useHomeStore.getState().activeCategory);
+  }, [fetchCategory]);
 
   useEffect(() => {
     if (items.length === 0) return;
@@ -73,13 +86,15 @@ export default function ContentGrid() {
         </div>
         <h3 className="text-lg font-bold text-textPrimary mb-2">服务聚合查询失败</h3>
         <p className="text-textSecondary text-sm max-w-md mb-6">{error}</p>
+        <SourceFailures sources={sources} />
         <div className="flex flex-wrap gap-4 justify-center">
           <button
             onClick={() => fetchCategory(activeCategory, true)}
             className="px-5 py-2 bg-primary hover:bg-primary/90 text-white font-semibold rounded-xl text-sm transition-all shadow-md active:scale-95 cursor-pointer"
           >
-            重试连接
+            重试加载
           </button>
+          <Link href="/plugins" className="px-5 py-2 text-primary font-semibold text-sm">来源管理</Link>
           <button
             onClick={() => loadMockFallback()}
             className="px-5 py-2 bg-surfaceLight hover:bg-surfaceLight/80 text-textSecondary font-semibold rounded-xl text-sm border border-border transition-all active:scale-95 cursor-pointer"
@@ -93,6 +108,7 @@ export default function ContentGrid() {
 
   return (
     <div className="w-full flex flex-col gap-8">
+      <SourceFailures sources={sources} />
       <div ref={containerRef} className="w-full grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-6">
         {items.map((item: any) => {
           const href = detailHref(item);

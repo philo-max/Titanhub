@@ -2,6 +2,8 @@ import { getQuickJS, QuickJSContext } from 'quickjs-emscripten';
 import { PlaywrightSniffer } from './sniffer';
 import dns from 'dns/promises';
 import crypto from 'crypto';
+import { isIP } from 'net';
+import { fetchPinnedPublic, isPrivateOrReservedIp, isPublicAddress, PinnedNetworkError, resolveFakeIpAddress } from './fake-ip-network';
 
 export interface SandboxResult<T> {
   success: boolean;
@@ -19,6 +21,10 @@ function expandSelfClosingTags(xml: string): string {
     /<([a-zA-Z][\w:-]*)((?:"[^"]*"|'[^']*'|[^'">])*)\/>/g,
     '<$1$2></$1>'
   );
+}
+
+function isXPathSelector(selector: string): boolean {
+  return /^(\/|\.\/|\(\/)/.test(selector);
 }
 
 function executeXPath(html: string, expression: string): any[] {
@@ -97,6 +103,7 @@ function executeXPath(html: string, expression: string): any[] {
 interface DnsCacheEntry {
   ip: string;
   expiresAt: number;
+  pinned?: boolean;
 }
 
 const dnsCache = new Map<string, DnsCacheEntry>();
@@ -170,7 +177,7 @@ async function hardenedFetch(
 
   while (redirectCount <= MAX_REDIRECTS) {
     // Validate every URL in the chain (prevents SSRF via redirect to internal IPs)
-    const isSafe = await isSafeUrl(currentUrl);
+    const isSafe = await isSafeUrl(currentUrl, { allowPinnedFakeIp: true });
     if (!isSafe) {
       throw new Error(`SecurityError: URL '${currentUrl}' is blocked by sandbox policy.`);
     }
@@ -221,12 +228,15 @@ async function hardenedFetch(
 
         // Use undici ProxyAgent if PROXY_URL is set
         const proxyUrl = process.env.PROXY_URL || process.env.HTTP_PROXY || process.env.HTTPS_PROXY;
-        if (proxyUrl) {
+        const validatedAddress = dnsCache.get(new URL(currentUrl).hostname.toLowerCase());
+        if (proxyUrl && !validatedAddress?.pinned) {
           const { ProxyAgent } = require('undici');
           fetchOptions.dispatcher = new ProxyAgent(proxyUrl);
         }
 
-        res = await fetch(currentUrl, fetchOptions);
+        res = validatedAddress?.pinned
+          ? await fetchPinnedPublic(currentUrl, validatedAddress.ip, fetchOptions)
+          : await fetch(currentUrl, fetchOptions);
         lastHeaders = {};
         // Safely extract headers (supports both standard Headers and plain objects)
         try {
@@ -256,6 +266,7 @@ async function hardenedFetch(
         }
         break; // Success or non-retryable status
       } catch (err: any) {
+        if (err instanceof PinnedNetworkError) throw err;
         lastError = err;
         if (attempt < MAX_FETCH_RETRIES) {
           await new Promise((resolve) =>
@@ -429,14 +440,18 @@ export function clearPluginCookies(pluginId: string): void {
   cookieJar.delete(pluginId);
 }
 
-export async function isSafeUrl(urlString: string): Promise<boolean> {
+export async function isSafeUrl(urlString: string, options: { allowPinnedFakeIp?: boolean } = {}): Promise<boolean> {
   try {
     const parsed = new URL(urlString);
+    // 1. Strict protocol check: only http and https are permitted
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return false;
+    }
+
     const hostname = parsed.hostname.toLowerCase();
 
-    // 1. Whitelist local mock endpoints (localhost:3001/mock-site/...)
-    // Also allow any local loopback requests in testing environment
-    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]') {
+    // 2. Loopback & local mock endpoint handling
+    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]' || hostname === '::1') {
       if (process.env.NODE_ENV === 'test') {
         return true;
       }
@@ -447,19 +462,17 @@ export async function isSafeUrl(urlString: string): Promise<boolean> {
       return false;
     }
 
-    // 2. Reject private IP ranges (fast check before DNS)
-    const privateIpRegex = /^(127\.|10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|169\.254\.)/;
-    if (privateIpRegex.test(hostname)) {
+    // 3. Reject raw private IP literals (fast check before DNS)
+    if (isPrivateOrReservedIp(hostname)) {
       return false;
     }
 
-    // 3. Block intranet domains (must have a dot)
+    // 4. Block intranet domains (must have a dot)
     if (!hostname.includes('.')) {
       return false;
     }
 
-    // 4. Resolve DNS to check if it points to a private/local IP (SSRF mitigation)
-    // In test environment, skip DNS check to allow offline E2E mock server tests.
+    // 5. Resolve DNS to check if it points to a private/local IP (SSRF mitigation)
     if (process.env.NODE_ENV !== 'test') {
       try {
         const cacheKey = hostname;
@@ -467,37 +480,58 @@ export async function isSafeUrl(urlString: string): Promise<boolean> {
         let ip: string;
 
         if (cached && cached.expiresAt > Date.now()) {
+          if (cached.pinned && !options.allowPinnedFakeIp) return false;
           ip = cached.ip;
         } else {
           const lookup = await dns.lookup(hostname);
-          ip = lookup.address;
+          const pinned = /^198\.(18|19)\./.test(lookup.address);
+          if (pinned && !options.allowPinnedFakeIp) return false;
+          ip = pinned ? await resolveFakeIpAddress(hostname) : lookup.address;
           dnsCache.set(cacheKey, {
             ip,
+            pinned,
             expiresAt: Date.now() + DNS_CACHE_TTL_MS,
           });
         }
 
-        if (
-          privateIpRegex.test(ip) ||
-          ip === '127.0.0.1' ||
-          ip === '::1' ||
-          ip.startsWith('fe80') ||
-          ip.startsWith('fc00')
-        ) {
+        if (isPrivateOrReservedIp(ip)) {
           return false;
         }
-      } catch {
+      } catch (error) {
+        console.warn(`[Sandbox] DNS validation failed for ${hostname}: ${error instanceof Error ? error.message : String(error)}`);
         return false;
       }
     }
 
     return true;
   } catch {
-    if (process.env.NODE_ENV === 'test') {
-      return true;
-    }
     return false;
   }
+}
+
+export async function resolveValidatedAddress(hostname: string): Promise<string | null> {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  try {
+    if (isIP(host)) return isPublicAddress(host) ? host : null;
+    if (host === 'localhost' || !host.includes('.')) return null;
+    const cached = dnsCache.get(host);
+    if (cached && cached.expiresAt > Date.now()) return isPublicAddress(cached.ip) ? cached.ip : null;
+    const lookup = await dns.lookup(host);
+    const pinned = /^198\.(18|19)\./.test(lookup.address);
+    const ip = pinned ? await resolveFakeIpAddress(host) : lookup.address;
+    if (!isPublicAddress(ip)) return null;
+    dnsCache.set(host, { ip, pinned, expiresAt: Date.now() + DNS_CACHE_TTL_MS });
+    return ip;
+  } catch {
+    return null;
+  }
+}
+
+export function fetchWithValidatedTransport(url: string, init: RequestInit): Promise<Response> {
+  const validated = dnsCache.get(new URL(url).hostname.toLowerCase());
+  return validated?.pinned
+    ? fetchPinnedPublic(url, validated.ip, init)
+    : fetch(url, init);
 }
 
 interface PooledContext {
@@ -632,7 +666,7 @@ export class PluginSandbox {
         const html = vm.dump(htmlVal) as string;
         const selector = vm.dump(selectorVal) as string;
         try {
-          if (selector.startsWith('/') || selector.startsWith('//')) {
+          if (isXPathSelector(selector)) {
             const results = executeXPath(html, selector);
             return vm.newString(JSON.stringify(results));
           }
@@ -660,7 +694,7 @@ export class PluginSandbox {
         const html = vm.dump(htmlVal) as string;
         const selector = vm.dump(selectorVal) as string;
         try {
-          if (selector.startsWith('/') || selector.startsWith('//')) {
+          if (isXPathSelector(selector)) {
             const results = executeXPath(html, selector);
             if (results.length === 0) return vm.null;
             return vm.newString(JSON.stringify(results[0]));
@@ -689,7 +723,7 @@ export class PluginSandbox {
         const selector = vm.dump(selectorVal) as string;
         const attr = vm.dump(attrVal) as string;
         try {
-          if (selector.startsWith('/') || selector.startsWith('//')) {
+          if (isXPathSelector(selector)) {
             const results = executeXPath(html, selector);
             if (results.length === 0) return vm.newString('');
             if (selector.endsWith('/@' + attr) || selector.endsWith(`/@*[name()='${attr}']`)) {
@@ -714,7 +748,7 @@ export class PluginSandbox {
         const html = vm.dump(htmlVal) as string;
         const selector = vm.dump(selectorVal) as string;
         try {
-          if (selector.startsWith('/') || selector.startsWith('//')) {
+          if (isXPathSelector(selector)) {
             const results = executeXPath(html, selector);
             if (results.length === 0) return vm.newString('');
             return vm.newString(results[0].text);
@@ -994,7 +1028,7 @@ export class PluginSandbox {
 
           const promise = (async () => {
             try {
-              const isSafe = await isSafeUrl(url);
+              const isSafe = await isSafeUrl(url, { allowPinnedFakeIp: true });
               if (!isSafe) {
                 const errStr = trackTemp(
                   vm.newString(

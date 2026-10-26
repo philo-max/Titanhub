@@ -3,15 +3,17 @@
 import React, { use, useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import SmartImage from '@/components/SmartImage';
+import FavoriteButton from '@/components/FavoriteButton';
 import { useRouter } from 'next/navigation';
 import {
   animateDetailPageEntrance,
   animateDetailPageExitBack,
   animateDetailPageExitPlay,
 } from '@/lib/animations';
-import { ArrowLeft, Play, Calendar, User, Compass, HelpCircle, Loader2, Search, Info, Tv, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Play, Calendar, User, Compass, HelpCircle, Loader2, Search, Tv, ChevronRight } from 'lucide-react';
 import { API_BASE, recordMediaView } from '@/lib/config';
 import { playbackCache } from '@/lib/playbackCache';
+import { cleanTitle } from '@/lib/source-fallback';
 
 interface Params {
   pluginId: string;
@@ -51,6 +53,7 @@ export default function AnimeDetailPage({ params }: { params: Promise<Params> })
   const [crossSourceError, setCrossSourceError] = useState('');
 
   useEffect(() => {
+    let cancelled = false;
     const fetchData = async () => {
       setLoading(true);
       setError('');
@@ -72,19 +75,20 @@ export default function AnimeDetailPage({ params }: { params: Promise<Params> })
           setProvidesVideo(false);
         }
         
-        // Always auto-search all video sources for this title so users can switch sources
-        setCrossSourceLoading(true);
+        // Auto-search all video sources in the background so the chapter list is never held up by slow sources
+        const loadCrossSources = async () => {
+          const searchTitle = cleanTitle(detailData.detail.title);
+          setCrossSourceLoading(true);
           try {
-            const searchRes = await fetch(`${API_BASE}/api/aggregate/search?q=${encodeURIComponent(detailData.detail.title)}&type=anime`);
+            const searchRes = await fetch(`${API_BASE}/api/aggregate/search?q=${encodeURIComponent(searchTitle)}&type=anime`);
             const searchData = await searchRes.json();
-            
-            // Find the exact matching group, fallback to first item
-            const normTarget = detailData.detail.title.replace(/[\s\-:：·]/g, '').toLowerCase();
-            const hubGroup = searchData.items?.find((item: any) => 
+
+            const normTarget = searchTitle.replace(/[\s\-:：·]/g, '').toLowerCase();
+            const hubGroup = searchData.items?.find((item: any) =>
               item.title.replace(/[\s\-:：·]/g, '').toLowerCase() === normTarget
             ) || searchData.items?.[0];
             const grouped: Record<string, Array<any>> = {};
-            
+
             if (hubGroup && hubGroup.sources) {
               const videoSources = hubGroup.sources.filter((s: any) => s.providesVideo);
               for (const source of videoSources) {
@@ -98,13 +102,34 @@ export default function AnimeDetailPage({ params }: { params: Promise<Params> })
                 });
               }
             }
+            if (cancelled) return;
             setCrossSourceResults(grouped);
-          } catch (e: any) {
-            setCrossSourceError('跨源搜索失败，请手动搜索');
-          } finally {
             setCrossSourceLoading(false);
+
+            const probes = Object.entries(grouped).flatMap(([name, items]) => items.map(item => ({ name, item })));
+            await Promise.all(probes.map(async ({ name, item }) => {
+              try {
+                const response = await fetch(`${API_BASE}/api/plugins/${item.pluginId}/chapters/${item.id}`);
+                const data = await response.json();
+                if (data.error || !Array.isArray(data.chapters) || data.chapters.length > 0 || cancelled) return;
+                setCrossSourceResults(current => {
+                  const remaining = (current[name] || []).filter(entry => !(entry.pluginId === item.pluginId && entry.id === item.id));
+                  const next = { ...current };
+                  if (remaining.length) next[name] = remaining; else delete next[name];
+                  return next;
+                });
+              } catch {
+                return;
+              }
+            }));
+          } catch (e: any) {
+            if (!cancelled) setCrossSourceError('跨源搜索失败，请手动搜索');
+          } finally {
+            if (!cancelled) setCrossSourceLoading(false);
           }
-          
+        };
+        void loadCrossSources();
+
         if (viewRecordedRef.current !== mediaId) {
           viewRecordedRef.current = mediaId;
           recordMediaView({
@@ -132,6 +157,9 @@ export default function AnimeDetailPage({ params }: { params: Promise<Params> })
     };
 
     fetchData();
+    return () => {
+      cancelled = true;
+    };
   }, [pluginId, mediaId]);
 
   // GSAP Entrance Animations
@@ -250,6 +278,7 @@ export default function AnimeDetailPage({ params }: { params: Promise<Params> })
               <h1 className="animate-fade-in text-3xl sm:text-4xl font-extrabold tracking-tight mb-4 bg-gradient-to-r from-white via-textPrimary to-textSecondary bg-clip-text text-transparent">
                 {detail.title}
               </h1>
+              <FavoriteButton mediaType="anime" pluginId={pluginId} mediaId={mediaId} />
 
               {/* Badges */}
               <div className="animate-fade-in flex flex-wrap gap-2 mb-6">
@@ -449,6 +478,33 @@ export default function AnimeDetailPage({ params }: { params: Promise<Params> })
             </div>
           )}
         </section>
+
+        {providesVideo && (crossSourceLoading || Object.values(crossSourceResults).some(items => items.some(item => item.pluginId !== pluginId))) && (
+          <section className="bg-surface/20 border border-borderSubtle/60 rounded-2xl p-6 backdrop-blur-sm">
+            <div className="flex items-center space-x-2 border-b border-borderSubtle pb-4 mb-4">
+              <Tv className="h-5 w-5 text-violet-400" />
+              <h2 className="text-lg font-bold text-textPrimary">换源</h2>
+              <span className="text-xs text-textTertiary">当前源播不出来时，换一个来源试试</span>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              {Object.values(crossSourceResults).flat().filter(item => item.pluginId !== pluginId).map(item => (
+                <Link
+                  key={`${item.pluginId}-${item.id}`}
+                  href={`/anime/${item.pluginId}/${item.id}`}
+                  className="text-xs px-4 py-2.5 rounded-xl border font-semibold bg-surface border-border text-textSecondary hover:text-textPrimary hover:border-violet-500/40 transition-all active:scale-95"
+                >
+                  {item.pluginName}
+                </Link>
+              ))}
+              {crossSourceLoading && (
+                <span className="flex items-center gap-2 text-xs text-textTertiary">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  正在查找其他来源...
+                </span>
+              )}
+            </div>
+          </section>
+        )}
       </div>
     </div>
   );

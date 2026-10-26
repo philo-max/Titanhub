@@ -8,7 +8,6 @@ import {
   VolumeX,
   Maximize,
   Minimize,
-  Settings,
   MessageSquare,
   Send,
   ArrowRight,
@@ -18,6 +17,8 @@ import Hls from 'hls.js';
 import DanmakuLayer, { DanmakuComment } from './DanmakuLayer';
 import { animateControlsVisibility } from '../lib/animations';
 import { API_BASE } from '@/lib/config';
+import { videoResumeTime } from '@/lib/resume-position';
+import { bindProgressFlush } from '@/lib/progress-flush';
 
 export interface VideoSource {
   quality: string;
@@ -29,11 +30,13 @@ interface VideoPlayerProps {
   title: string;
   comments: DanmakuComment[];
   onNextChapter?: () => void;
-  onProgress?: (time: number, duration: number) => void;
+  onProgress?: (time: number, duration: number, force?: boolean) => void;
   onSendComment?: (text: string, time: number) => void;
   pluginId?: string;
   mediaId?: string;
   chapterId?: string;
+  initialPosition?: number | null;
+  initialProgress?: number;
 }
 
 export default function VideoPlayer({
@@ -46,6 +49,8 @@ export default function VideoPlayer({
   pluginId,
   mediaId,
   chapterId,
+  initialPosition,
+  initialProgress,
 }: VideoPlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -54,6 +59,7 @@ export default function VideoPlayer({
   // Active Quality Source
   const [activeSource, setActiveSource] = useState<VideoSource | null>(null);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
+  const playbackSpeedRef = useRef(1);
 
   // Quality & Speed Dropdown Toggles
   const [showQualityMenu, setShowQualityMenu] = useState(false);
@@ -75,9 +81,31 @@ export default function VideoPlayer({
   // Seamless quality switching memory
   const seekOnLoadRef = useRef<number | null>(null);
   const playOnLoadRef = useRef<boolean>(false);
+  const restoredRef = useRef(false);
+  const initialRestoredRef = useRef(false);
+  const progressCallbackRef = useRef(onProgress);
+  progressCallbackRef.current = onProgress;
+
+  useEffect(() => {
+    const capture = () => {
+      const video = videoRef.current;
+      if (video && restoredRef.current && Number.isFinite(video.duration) && video.duration > 0) {
+        progressCallbackRef.current?.(video.currentTime, video.duration, true);
+      }
+    };
+    const release = bindProgressFlush(window, capture);
+    return () => { capture(); release(); };
+  }, []);
 
   // Hide controls timer
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    seekOnLoadRef.current = null;
+    playOnLoadRef.current = false;
+    restoredRef.current = false;
+    initialRestoredRef.current = false;
+  }, [pluginId, mediaId, chapterId]);
 
   // Sync sources prop
   useEffect(() => {
@@ -99,22 +127,28 @@ export default function VideoPlayer({
     let hls: Hls | null = null;
     const src = activeSource.url;
 
-    // Reset playback states only if we are NOT performing a seamless quality switch
-    if (seekOnLoadRef.current === null) {
-      setIsPlaying(false);
-      setCurrentTime(0);
-      setDuration(0);
-    }
+    restoredRef.current = false;
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setDuration(0);
 
     // Check if the stream is HLS (m3u8)
     const isHls = src.endsWith('.m3u8') || src.includes('.m3u8');
 
-    const setupRestoredState = () => {
-      // Restore timestamp if quality changed
+    let metadataReady = false;
+    const setupRestoredState = (event: Event) => {
+      if (event.type === 'loadedmetadata') metadataReady = true;
+      if (!metadataReady || restoredRef.current || !Number.isFinite(video.duration) || video.duration <= 0) return;
       if (seekOnLoadRef.current !== null) {
-        video.currentTime = seekOnLoadRef.current;
+        video.currentTime = videoResumeTime({ position: seekOnLoadRef.current }, video.duration);
         seekOnLoadRef.current = null;
+      } else if (!initialRestoredRef.current) {
+        video.currentTime = videoResumeTime({ position: initialPosition, progress: initialProgress }, video.duration);
+        initialRestoredRef.current = true;
       }
+      restoredRef.current = true;
+      setCurrentTime(video.currentTime);
+      setDuration(video.duration);
       // Restore playback state
       if (playOnLoadRef.current) {
         video.play().catch(() => {});
@@ -122,8 +156,11 @@ export default function VideoPlayer({
         playOnLoadRef.current = false;
       }
       // Re-apply playback speed
-      video.playbackRate = playbackSpeed;
+      video.playbackRate = playbackSpeedRef.current;
     };
+
+    video.addEventListener('loadedmetadata', setupRestoredState);
+    video.addEventListener('durationchange', setupRestoredState);
 
     if (isHls) {
       if (Hls.isSupported()) {
@@ -136,10 +173,6 @@ export default function VideoPlayer({
         });
         hls.loadSource(src);
         hls.attachMedia(video);
-
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          setupRestoredState();
-        });
 
         hls.on(Hls.Events.ERROR, (event, data) => {
           if (data.fatal) {
@@ -160,30 +193,27 @@ export default function VideoPlayer({
         video.src = src;
         video.load();
 
-        const onLoaded = () => {
-          setupRestoredState();
-          video.removeEventListener('loadedmetadata', onLoaded);
-        };
-        video.addEventListener('loadedmetadata', onLoaded);
       }
     } else {
       // Standard video file (MP4, WebM, etc.)
       video.src = src;
       video.load();
 
-      const onLoaded = () => {
-        setupRestoredState();
-        video.removeEventListener('loadedmetadata', onLoaded);
-      };
-      video.addEventListener('loadedmetadata', onLoaded);
     }
 
     return () => {
+      video.removeEventListener('loadedmetadata', setupRestoredState);
+      video.removeEventListener('durationchange', setupRestoredState);
       if (hls) {
         hls.destroy();
       }
     };
-  }, [activeSource, playbackSpeed]);
+  }, [activeSource, pluginId, mediaId, chapterId, initialPosition, initialProgress]);
+
+  useEffect(() => {
+    playbackSpeedRef.current = playbackSpeed;
+    if (videoRef.current) videoRef.current.playbackRate = playbackSpeed;
+  }, [playbackSpeed]);
 
   // Handle play/pause toggle
   const togglePlay = () => {
@@ -218,7 +248,7 @@ export default function VideoPlayer({
   const handleTimeUpdate = () => {
     if (!videoRef.current) return;
     setCurrentTime(videoRef.current.currentTime);
-    if (onProgress && videoRef.current.duration > 0) {
+    if (restoredRef.current && onProgress && Number.isFinite(videoRef.current.duration) && videoRef.current.duration > 0) {
       onProgress(videoRef.current.currentTime, videoRef.current.duration);
     }
   };

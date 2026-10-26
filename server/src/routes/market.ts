@@ -1,8 +1,9 @@
 import { Hono } from 'hono';
 import { requireAuth } from '../auth/jwt';
-import { adaptKazumi, adaptLNReader, adaptVenera } from '@titanhub/plugin-adapter';
-import { savePlugin } from '../db/db';
+import { adaptKazumi, adaptLNReader, adaptVenera, adaptMangayomi } from '@titanhub/plugin-adapter';
+import { getPlugin, savePlugin } from '../db/db';
 import type { MediaType } from '@titanhub/plugin-types';
+import { loadMarketCatalog, type MarketCatalog } from '../sources/catalog';
 
 type Env = {
   Variables: {
@@ -12,123 +13,55 @@ type Env = {
 
 const market = new Hono<Env>();
 
-interface MarketPlugin {
-  id: string;
-  name: string;
-  version: string;
-  type: MediaType;
-  sourceType: 'kazumi' | 'lnreader' | 'venera';
-  downloadUrl: string;
-  description?: string;
-  lang?: string;
-}
-
 // 10 minutes memory cache for market source listings
-let cache: { data: MarketPlugin[]; expiresAt: number } | null = null;
+let cache: { data: MarketCatalog; expiresAt: number } | null = null;
 const CACHE_DURATION = 10 * 60 * 1000;
 
-async function fetchWithTimeout(url: string, timeout = 8000): Promise<Response> {
+async function fetchSourceCode(url: string, timeout = 8000): Promise<{ status: number; code: string }> {
   const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), timeout);
+  const timer = setTimeout(() => controller.abort(), timeout);
+  let releaseReader: (() => Promise<void>) | undefined;
   try {
-    const response = await fetch(url, { signal: controller.signal });
-    clearTimeout(id);
-    return response;
-  } catch (err) {
-    clearTimeout(id);
-    throw err;
-  }
-}
-
-// Helper to fetch Kazumi Rules index
-async function getKazumiMarket(): Promise<MarketPlugin[]> {
-  try {
-    const res = await fetchWithTimeout('https://raw.githubusercontent.com/Predidit/KazumiRules/master/index.json');
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const list = await res.json() as any[];
-    return list.map((item: any) => ({
-      id: `kazumi-${item.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
-      name: `${item.name} (Kazumi)`,
-      version: item.version || '1.0.0',
-      type: 'anime' as const, // Default type for Kazumi rules
-      sourceType: 'kazumi' as const,
-      downloadUrl: `https://raw.githubusercontent.com/Predidit/KazumiRules/master/rules/${item.name}.json`,
-      description: `动漫采集源，支持 XPath 解析。`,
-    }));
-  } catch (err) {
-    console.error('Failed to fetch Kazumi market sources:', err);
-    return [];
-  }
-}
-
-// Helper to fetch LNReader Plugins index
-async function getLNReaderMarket(): Promise<MarketPlugin[]> {
-  try {
-    const res = await fetchWithTimeout('https://raw.githubusercontent.com/LNReader/lnreader-plugins/plugins/v3.0.0/.dist/plugins.min.json');
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const list = await res.json() as any[];
-    return list.map((item: any) => ({
-      id: `lnreader-${item.id}`,
-      name: `${item.name} (LNReader)`,
-      version: item.version || '1.0.0',
-      type: 'novel' as const,
-      sourceType: 'lnreader' as const,
-      downloadUrl: item.url,
-      lang: item.lang,
-      description: `小说阅读源。站点: ${item.site || '未知'}，语言: ${item.lang || '中文'}。`,
-    }));
-  } catch (err) {
-    console.error('Failed to fetch LNReader market sources:', err);
-    return [];
-  }
-}
-
-// Helper to fetch Venera Configs index
-async function getVeneraMarket(): Promise<MarketPlugin[]> {
-  try {
-    const res = await fetchWithTimeout('https://raw.githubusercontent.com/venera-app/venera-configs/master/index.json');
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const list = await res.json() as any[];
-    return list.map((item: any) => ({
-      id: `venera-${item.key || item.fileName.replace('.js', '')}`,
-      name: `${item.name} (Venera)`,
-      version: item.version || '1.0.0',
-      type: 'manga' as const,
-      sourceType: 'venera' as const,
-      downloadUrl: `https://raw.githubusercontent.com/venera-app/venera-configs/master/${item.fileName}`,
-      description: item.description || `漫画阅读源。支持 Cheerio 解析器。`,
-    }));
-  } catch (err) {
-    console.error('Failed to fetch Venera market sources:', err);
-    return [];
+    const response = await fetch(url, { signal: controller.signal, redirect: 'error' });
+    if (!response.ok) { await response.body?.cancel(); return { status: response.status, code: '' }; }
+    if (!response.body) throw new Error('来源源码响应为空。');
+    const reader = response.body.getReader();
+    releaseReader = async () => { await reader.cancel().catch(() => {}); reader.releaseLock(); };
+    const chunks: Uint8Array[] = [];
+    const maximumBytes = 2 * 1024 * 1024;
+    let size = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > maximumBytes) throw new Error('来源源码超过大小限制。');
+      chunks.push(value);
+    }
+    return { status: response.status, code: Buffer.concat(chunks).toString('utf8') };
+  } finally {
+    clearTimeout(timer);
+    await releaseReader?.();
   }
 }
 
 // GET: Fetch all plugins from online markets
 market.get('/sources', async (c) => {
   const now = Date.now();
-  if (cache && cache.expiresAt > now) {
-    return c.json({ sources: cache.data });
+  if (c.req.query('refresh') !== '1' && cache && cache.expiresAt > now) {
+    return c.json(cache.data);
   }
 
-  // Fetch all in parallel, gracefully degrading on failure
-  const [kazumi, lnreader, venera] = await Promise.all([
-    getKazumiMarket(),
-    getLNReaderMarket(),
-    getVeneraMarket(),
-  ]);
-
-  const sources = [...kazumi, ...lnreader, ...venera];
+  const catalog = await loadMarketCatalog();
 
   // If we got some data, cache it
-  if (sources.length > 0) {
+  if (catalog.sources.length > 0) {
     cache = {
-      data: sources,
+      data: catalog,
       expiresAt: now + CACHE_DURATION,
     };
   }
 
-  return c.json({ sources });
+  return c.json(catalog);
 });
 
 // POST: Install plugin from market (requires authentication)
@@ -137,16 +70,25 @@ market.post('/install', requireAuth, async (c) => {
     const body = await c.req.json();
     const { id, name, version, sourceType, downloadUrl } = body;
 
-    if (!id || !name || !sourceType || !downloadUrl) {
+    if (![id, name, sourceType, downloadUrl].every(value => typeof value === 'string' && value.trim())) {
       return c.json({ error: 'Missing required parameters: id, name, sourceType, downloadUrl.' }, 400);
     }
 
-    // Download code from market URL
-    const res = await fetchWithTimeout(downloadUrl);
-    if (!res.ok) {
-      return c.json({ error: `Failed to download plugin from ${downloadUrl}. Status: ${res.status}` }, 400);
+    let parsedUrl: URL;
+    try { parsedUrl = new URL(downloadUrl); } catch { return c.json({ error: '来源下载地址无效。' }, 400); }
+    if (parsedUrl.protocol !== 'https:' || parsedUrl.username || parsedUrl.password) return c.json({ error: '来源下载地址必须为 HTTPS。' }, 400);
+    if (!['kazumi', 'lnreader', 'venera', 'mangayomi'].includes(sourceType)) return c.json({ error: `Unsupported sourceType '${sourceType}'` }, 400);
+
+    if (sourceType === 'mangayomi' && (body.metadata?.sourceCodeLanguage !== 1 || !['manga', 'novel'].includes(body.type) || typeof body.metadata?.baseUrl !== 'string' || new URL(downloadUrl).pathname.endsWith('.dart'))) {
+      return c.json({ error: '当前仅支持 Mangayomi JavaScript 漫画或小说来源；Dart 来源运行时尚未接入。' }, 400);
     }
-    const rawContent = await res.text();
+
+    // Download code from market URL
+    const downloaded = await fetchSourceCode(downloadUrl);
+    if (downloaded.status < 200 || downloaded.status >= 300) {
+      return c.json({ error: `Failed to download plugin from ${downloadUrl}. Status: ${downloaded.status}` }, 400);
+    }
+    const rawContent = downloaded.code;
 
     let adaptedPlugin: { id: string; name: string; version: string; types: MediaType[]; code: string };
 
@@ -165,22 +107,27 @@ market.post('/install', requireAuth, async (c) => {
         name: name.replace(/\s*\(Venera\)$/i, ''), // Clean name prefix
         version,
       });
+    } else if (sourceType === 'mangayomi') {
+      adaptedPlugin = adaptMangayomi(rawContent, {
+        ...body.metadata, sourceId: body.metadata.id, id, name, version, type: body.type, baseUrl: body.metadata.baseUrl,
+      });
     } else {
       return c.json({ error: `Unsupported sourceType '${sourceType}'` }, 400);
     }
 
     // Save and activate in the database
+    const existing = await getPlugin(adaptedPlugin.id);
     const saved = await savePlugin({
       id: adaptedPlugin.id,
       name: adaptedPlugin.name,
       version: adaptedPlugin.version,
       types: adaptedPlugin.types,
       code: adaptedPlugin.code,
-      isActive: true,
+      isActive: existing?.isActive ?? true,
       isBuiltin: false,
     });
 
-    const { code, ...pluginInfo } = saved;
+    const { code: _code, ...pluginInfo } = saved;
     return c.json({ success: true, plugin: pluginInfo });
   } catch (err: any) {
     console.error('Failed to install plugin from market:', err);

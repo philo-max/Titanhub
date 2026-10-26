@@ -1,0 +1,6 @@
+dist
+release
+dist-release
+dist-package
+build-out
+node_modules

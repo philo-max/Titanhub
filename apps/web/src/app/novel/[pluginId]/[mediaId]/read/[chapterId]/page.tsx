@@ -1,23 +1,20 @@
 'use client';
 
 import React, { use, useEffect, useState, useRef } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { animateScrollProgress, animateNovelParagraphsReveal } from '@/lib/animations';
 import {
   ArrowLeft,
   BookOpen,
   Settings,
-  Sun,
-  Moon,
   Type,
-  ChevronLeft,
-  ChevronRight,
   Menu,
   Loader2,
 } from 'lucide-react';
-import { useSyncStore } from '@/stores/syncStore';
+import { useSyncStore, type TrackingLog } from '@/stores/syncStore';
+import { findResumeLog, novelResumeRatio } from '@/lib/resume-position';
 import { API_BASE } from '@/lib/config';
+import { bindProgressFlush } from '@/lib/progress-flush';
 
 interface Params {
   pluginId: string;
@@ -34,6 +31,11 @@ interface Chapter {
 type ReaderTheme = 'obsidian' | 'sepia' | 'mint' | 'light';
 
 export default function NovelReaderPage({ params }: { params: Promise<Params> }) {
+  const identity = use(params);
+  return <NovelReaderPageContent key={JSON.stringify(identity)} params={params} />;
+}
+
+function NovelReaderPageContent({ params }: { params: Promise<Params> }) {
   const { pluginId, mediaId, chapterId } = use(params);
   const router = useRouter();
 
@@ -51,6 +53,27 @@ export default function NovelReaderPage({ params }: { params: Promise<Params> })
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   const { saveProgress } = useSyncStore();
+  const [resume, setResume] = useState<TrackingLog>();
+  const [resumeReady, setResumeReady] = useState(false);
+  const [restored, setRestored] = useState(false);
+  const [progressError, setProgressError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    void useSyncStore.getState().pullTracking().then(() => {
+      if (cancelled) return;
+      setResume(findResumeLog(useSyncStore.getState().trackingList, {
+        mediaType: 'novel', pluginId, mediaId, chapterId,
+      }));
+      setResumeReady(true);
+    }).catch(() => {
+      if (!cancelled) {
+        setError('读取阅读进度失败，请重新打开本章。');
+        setResumeReady(true);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [pluginId, mediaId, chapterId]);
   const lastSyncTimeRef = useRef<number>(0);
   const scrollIndicatorRef = useRef<HTMLDivElement>(null);
   const textContainerRef = useRef<HTMLDivElement>(null);
@@ -85,9 +108,27 @@ export default function NovelReaderPage({ params }: { params: Promise<Params> })
     fetchReaderData();
   }, [pluginId, mediaId, chapterId]);
 
+  useEffect(() => {
+    if (loading || !resumeReady || restored || !content || error) return;
+    let cancelled = false;
+    let frame = 0;
+    void document.fonts.ready.then(() => {
+      if (cancelled) return;
+      frame = requestAnimationFrame(() => {
+        const element = document.documentElement;
+        const height = Math.max(0, element.scrollHeight - element.clientHeight);
+        window.scrollTo({ top: height * novelResumeRatio(resume), behavior: 'instant' });
+        lastSyncTimeRef.current = Date.now();
+        setRestored(true);
+      });
+    });
+    return () => { cancelled = true; cancelAnimationFrame(frame); };
+  }, [loading, resumeReady, restored, content, error, resume]);
+
   // Page Scroll Progress Indicator Driven by GSAP
   useEffect(() => {
-    const handleScroll = () => {
+    if (!restored) return;
+    const captureProgress = (force = false) => {
       if (textContainerRef.current) {
         const element = document.documentElement;
         const totalHeight = element.scrollHeight - element.clientHeight;
@@ -97,7 +138,7 @@ export default function NovelReaderPage({ params }: { params: Promise<Params> })
 
         // Sync progress every few scroll ticks or significant jumps
         const now = Date.now();
-        if (now - lastSyncTimeRef.current > 5000) {
+        if (force || now - lastSyncTimeRef.current > 5000) {
           // Sync at most every 5s
           lastSyncTimeRef.current = now;
           saveProgress({
@@ -107,25 +148,29 @@ export default function NovelReaderPage({ params }: { params: Promise<Params> })
             chapterNo: chapters.find((c) => c.id === chapterId)?.chapterNo ?? 1,
             chapterId,
             progress: scrollPercent / 100,
+            position: scrollPercent / 100,
             status: 'watching',
-          });
+          }).catch(() => setProgressError('保存阅读进度失败，请稍后重试。'));
         }
       }
     };
 
+    const handleScroll = () => captureProgress();
+    const capture = () => captureProgress(true);
+    const release = bindProgressFlush(window, capture);
     window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, [loading, mediaId, pluginId, chapterId, chapters, saveProgress]);
+    return () => { capture(); release(); window.removeEventListener('scroll', handleScroll); };
+  }, [restored, loading, mediaId, pluginId, chapterId, chapters, saveProgress]);
 
   // GSAP Fade-in reveal on text loading
   useEffect(() => {
-    if (!loading && content) {
+    if (!loading && resumeReady && content) {
       const ctx = animateNovelParagraphsReveal(textContainerRef.current, '.animate-paragraph');
       return () => {
         if (ctx) ctx.revert();
       };
     }
-  }, [loading, content]);
+  }, [loading, resumeReady, content]);
 
   // Theme theme-specific Tailwind configurations
   const themeClasses: Record<
@@ -163,7 +208,7 @@ export default function NovelReaderPage({ params }: { params: Promise<Params> })
   // Helper: split text by double newline to render separate paragraph DOM nodes
   const paragraphs = content.split('\n\n').filter((p) => p.trim() !== '');
 
-  if (loading) {
+  if (loading || !resumeReady) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center text-textSecondary">
         <Loader2 className="h-10 w-10 text-violet-500 animate-spin mb-4" />
@@ -193,6 +238,7 @@ export default function NovelReaderPage({ params }: { params: Promise<Params> })
     <div
       className={`min-h-screen ${activeTheme.bg} transition-colors duration-300 relative flex flex-col font-sans`}
     >
+      {progressError && <p role="alert" className="text-rose-500">{progressError}</p>}
       {/* Scroll Progress Bar */}
       <div className="fixed top-0 left-0 w-full h-[3px] bg-black/10 z-50">
         <div

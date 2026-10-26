@@ -1,5 +1,7 @@
-import { chromium, Browser, Page, Request, Response } from 'playwright';
-import { isSafeUrl } from './sandbox';
+import type { Browser, Page, Request, Response } from 'playwright';
+import { fetchWithValidatedTransport, isSafeUrl, resolveValidatedAddress } from './sandbox';
+import { buildExternalProcessEnv } from '../auth/local-session';
+import { startValidatingProxy, type AddressResolver } from './validating-proxy';
 
 // Ad hosts ported from Kazumi's webview _isAdUrl filter
 const AD_URL_PATTERNS = ['googleads', 'googlesyndication', 'adtrafficquality', 'doubleclick', 'pagead2'];
@@ -15,15 +17,40 @@ interface SniffCacheEntry {
 }
 const sniffCache = new Map<string, SniffCacheEntry>();
 const SNIFF_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const SNIFF_TIMEOUT_MS = 25000;
+const IPC_GRACE_MS = 5000;
+const MAX_CONCURRENT_SNIFFS = 2;
+
+function explicitProxyUrl(): string | undefined {
+  return process.env.PROXY_URL || process.env.HTTP_PROXY || process.env.HTTPS_PROXY || undefined;
+}
 
 export class PlaywrightSniffer {
   private static browser: Browser | null = null;
+  static resolveAddress: AddressResolver = resolveValidatedAddress;
+  private static inFlight = new Map<string, Promise<string>>();
+  private static activeSniffs = 0;
+  private static waiting: Array<() => void> = [];
+
+  private static async withSlot<T>(task: () => Promise<T>): Promise<T> {
+    while (this.activeSniffs >= MAX_CONCURRENT_SNIFFS) {
+      await new Promise<void>((resolve) => this.waiting.push(resolve));
+    }
+    this.activeSniffs++;
+    try {
+      return await task();
+    } finally {
+      this.activeSniffs--;
+      this.waiting.shift()?.();
+    }
+  }
 
   private static async getBrowser(): Promise<Browser> {
     if (!this.browser) {
       const launchOptions: any = {
         headless: true,
         args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu'],
+        env: buildExternalProcessEnv(process.env),
       };
       
       const proxyUrl = process.env.PROXY_URL || process.env.HTTP_PROXY || process.env.HTTPS_PROXY;
@@ -31,6 +58,7 @@ export class PlaywrightSniffer {
         launchOptions.proxy = { server: proxyUrl };
       }
 
+      const { chromium } = await import('playwright');
       this.browser = await chromium.launch(launchOptions);
     }
     return this.browser;
@@ -125,6 +153,7 @@ export class PlaywrightSniffer {
    */
   private static async verifyVideoUrl(urlStr: string): Promise<string | null> {
     try {
+      if (!(await isSafeUrl(urlStr, { allowPinnedFakeIp: !explicitProxyUrl() }))) return null;
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000);
       const fetchOptions: any = {
@@ -139,7 +168,7 @@ export class PlaywrightSniffer {
         fetchOptions.dispatcher = new ProxyAgent(proxyUrl);
       }
 
-      const res = await fetch(urlStr, fetchOptions);
+      const res = proxyUrl ? await fetch(urlStr, fetchOptions) : await fetchWithValidatedTransport(urlStr, fetchOptions);
       clearTimeout(timeoutId);
       const ct = (res.headers.get('content-type') || '').toLowerCase();
 
@@ -188,6 +217,72 @@ export class PlaywrightSniffer {
    *    the Content-Type is actually video/* or application/x-mpegURL. This prevents
    *    returning placeholder/error images that share CDN URL patterns with videos.
    */
+  /**
+   * Delegate sniffing to Electron's Chromium instance via IPC channel.
+   */
+  private static sniffViaElectronIpc(
+    url: string,
+    headers: Record<string, string> = {},
+    proxyUrl?: string,
+    timeoutMs = SNIFF_TIMEOUT_MS
+  ): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const id = Math.random().toString(36).slice(2, 9);
+      let timer: NodeJS.Timeout | null = setTimeout(() => {
+        process.removeListener('message', handler);
+        process.send?.({ type: 'sniff_cancel', id });
+        reject(new Error(`[ElectronSniffer IPC] Sniffing timed out after ${timeoutMs}ms for ${url}`));
+      }, timeoutMs + IPC_GRACE_MS);
+
+      const handler = (msg: any) => {
+        if (msg && msg.type === 'sniff_response' && msg.id === id) {
+          if (timer) clearTimeout(timer);
+          timer = null;
+          process.removeListener('message', handler);
+          if (msg.success && msg.url) {
+            resolve(msg.url);
+          } else {
+            reject(new Error(msg.error || 'Electron sniffer failed to find video stream'));
+          }
+        }
+      };
+
+      process.on('message', handler);
+      process.send!({ type: 'sniff', id, url, headers, proxy: proxyUrl, timeoutMs });
+    });
+  }
+
+  /**
+   * Check status and availability of the current sniffing engine.
+   */
+  static async checkEngine(): Promise<{ available: boolean; engine: string; version?: string; error?: string }> {
+    if (process.env.TITANHUB_DESKTOP === '1' && typeof process.send === 'function') {
+      return new Promise((resolve) => {
+        const id = Math.random().toString(36).slice(2, 9);
+        const timer = setTimeout(() => {
+          resolve({ available: true, engine: 'electron-chromium' });
+        }, 3000);
+
+        const handler = (msg: any) => {
+          if (msg && msg.type === 'sniff_check_response' && msg.id === id) {
+            clearTimeout(timer);
+            process.removeListener('message', handler);
+            resolve({ available: msg.available, engine: msg.engine, version: msg.version });
+          }
+        };
+        process.on('message', handler);
+        process.send!({ type: 'sniff_check', id });
+      });
+    }
+
+    try {
+      await import('playwright');
+      return { available: true, engine: 'playwright-chromium' };
+    } catch (err: any) {
+      return { available: false, engine: 'none', error: err?.message };
+    }
+  }
+
   static async sniff(url: string, headers: Record<string, string> = {}): Promise<string> {
     // Check cache first — if we've recently sniffed this URL, return cached result
     const cached = sniffCache.get(url);
@@ -195,11 +290,40 @@ export class PlaywrightSniffer {
       return cached.url;
     }
 
-    const isSafe = await isSafeUrl(url);
+    const pending = this.inFlight.get(url);
+    if (pending) return pending;
+    const task = this.withSlot(() => this.sniffUncached(url, headers)).finally(() => this.inFlight.delete(url));
+    this.inFlight.set(url, task);
+    return task;
+  }
+
+  private static async sniffUncached(url: string, headers: Record<string, string>): Promise<string> {
+    const allowPinnedFakeIp = !explicitProxyUrl();
+    const isSafe = await isSafeUrl(url, { allowPinnedFakeIp });
     if (!isSafe) {
       throw new Error(`SecurityError: Access to URL '${url}' is blocked by sandbox policy.`);
     }
 
+    const proxy = allowPinnedFakeIp ? await startValidatingProxy(this.resolveAddress) : null;
+    try {
+      let found: string;
+      if (process.env.TITANHUB_DESKTOP === '1' && typeof process.send === 'function') {
+        console.log(`[Sniffer] Desktop mode detected: Delegating '${url}' to Electron Chromium...`);
+        found = await this.sniffViaElectronIpc(url, headers, proxy?.url);
+      } else {
+        found = await this.sniffWithPlaywright(url, headers, proxy?.url);
+      }
+      if (found && !(await isSafeUrl(found, { allowPinnedFakeIp }))) {
+        throw new Error(`SecurityError: Sniffed media URL '${found}' is blocked by sandbox policy.`);
+      }
+      if (found) sniffCache.set(url, { url: found, expiresAt: Date.now() + SNIFF_CACHE_TTL_MS });
+      return found;
+    } finally {
+      await proxy?.close();
+    }
+  }
+
+  private static async sniffWithPlaywright(url: string, headers: Record<string, string>, proxyServer?: string): Promise<string> {
     let context: Awaited<ReturnType<Browser['newContext']>> | null = null;
     try {
       const browser = await this.getBrowser();
@@ -213,6 +337,7 @@ export class PlaywrightSniffer {
         userAgent,
         extraHTTPHeaders,
         viewport: { width: 1280, height: 720 },
+        ...(proxyServer ? { proxy: { server: proxyServer, bypass: '<-loopback>' } } : {}),
       });
 
       // Only block images and fonts — NOT CSS.
@@ -288,7 +413,7 @@ export class PlaywrightSniffer {
       // Timeout is 25s: some sites take 5-8s for player init + 3-5s for
       // the video URL resolution API to respond.
       const checkInterval = 200;
-      const timeout = 25000;
+      const timeout = SNIFF_TIMEOUT_MS;
       let elapsed = 0;
       let nextActivateAt = 3000;
 
@@ -327,8 +452,7 @@ export class PlaywrightSniffer {
               continue;
             }
           }
-          
-          sniffCache.set(url, { url: finalUrl, expiresAt: Date.now() + 1000 * 60 * 60 });
+
           return finalUrl;
         }
       }

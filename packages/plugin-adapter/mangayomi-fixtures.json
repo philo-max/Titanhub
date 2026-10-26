@@ -1,0 +1,22 @@
+{
+  "repository": "entityJY/mangayomi-extensions-eJ",
+  "retrievedAt": "2026-10-24",
+  "scope": "Public JavaScript source snapshots only; media responses in tests are controlled fixtures",
+  "fixtures": [
+    {
+      "file": "mangayomi-teamx.fixture.txt",
+      "url": "https://raw.githubusercontent.com/entityJY/mangayomi-extensions-eJ/main/javascript/manga/src/ar/teamx.js",
+      "sha256": "547cf43727aa39043af1883b6620a3984a2e67603b09e125bd2aff907a411b92"
+    },
+    {
+      "file": "mangayomi-webnoveltranslations.fixture.txt",
+      "url": "https://raw.githubusercontent.com/entityJY/mangayomi-extensions-eJ/main/javascript/novel/src/en/webnoveltranslations.js",
+      "sha256": "e2dd82c6d3ae2e218fefe36062a0bb24c34671c47bd61d58445e062eb6d9153f"
+    },
+    {
+      "file": "mangayomi-mangadex.fixture.txt",
+      "url": "https://raw.githubusercontent.com/entityJY/mangayomi-extensions-eJ/main/javascript/manga/src/all/mangadex.js",
+      "sha256": "5dbc552eb37a5d90fef5fa421abeb4f093298e41a03e20c816913cfac79bd82b"
+    }
+  ]
+}

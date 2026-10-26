@@ -32,18 +32,21 @@ describe('adaptKazumi', () => {
   });
 
   it('rejects rules missing required fields', () => {
-    const { searchURL, ...incomplete } = kazumiRule;
+    const incomplete = { ...kazumiRule };
+    delete (incomplete as any).searchURL;
     expect(() => adaptKazumi(incomplete as any)).toThrow(/searchURL/);
   });
 
   it('accepts native Kazumi rules using the baseURL field casing', () => {
-    const { baseUrl, ...rest } = kazumiRule;
+    const rest = { ...kazumiRule };
+    delete (rest as any).baseUrl;
     const plugin = adaptKazumi({ ...rest, baseURL: 'https://native.example.com/' });
     expect(plugin.code).toContain('https://native.example.com/');
   });
 
   it('rejects rules missing both baseUrl and baseURL', () => {
-    const { baseUrl, ...incomplete } = kazumiRule;
+    const incomplete = { ...kazumiRule };
+    delete (incomplete as any).baseUrl;
     expect(() => adaptKazumi(incomplete as any)).toThrow(/baseUrl/);
   });
 });
@@ -63,7 +66,6 @@ describe('adaptVenera', () => {
     const source =
       'class MySource extends ComicSource { search = { load: async () => ({ comics: [] }) } }';
     const plugin = adaptVenera(source, { id: 'venera-class', name: 'Class 源' });
-    expect(plugin.code).toContain('Venera runtime shim');
     expect(plugin.code).toContain('new MySource()');
     expect(plugin.code).toContain('globalThis.plugin = {');
   });

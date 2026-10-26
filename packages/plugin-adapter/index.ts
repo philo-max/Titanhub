@@ -1,4 +1,8 @@
 import type { MediaType } from '@titanhub/plugin-types';
+import { KAZUMI_API_RUNTIME, type KazumiChapterApiConfig, type KazumiSearchApiConfig } from './kazumi-api';
+import { VENERA_SHIM } from './venera-runtime';
+import { LNREADER_SHIM, lnreaderBridge, wrapLNReaderSource, extractLegacyLNReaderSource } from './lnreader-runtime';
+export { adaptMangayomi, type MangayomiMetadata } from './mangayomi';
 
 export interface KazumiRule {
   name: string;
@@ -12,6 +16,10 @@ export interface KazumiRule {
   searchName: string;
   searchResult: string;
   searchCover?: string;
+  searchMode?: 'xpath' | 'api';
+  chapterMode?: 'xpath' | 'api';
+  searchApiConfig?: KazumiSearchApiConfig;
+  chapterApiConfig?: KazumiChapterApiConfig;
   chapterRoads?: string;
   chapterResult?: string;
   userAgent?: string;
@@ -57,14 +65,23 @@ function assertField(rule: Record<string, unknown>, field: string): void {
  * Rules with useWebview=true resolve playback via the host sniffVideo bridge.
  */
 export function adaptKazumi(rule: KazumiRule): AdaptedPlugin {
-  for (const field of [
-    'name',
-    'searchURL',
-    'searchList',
-    'searchName',
-    'searchResult',
-  ]) {
+  const requiredFields = rule.searchMode === 'api'
+    ? ['name']
+    : ['name', 'searchURL', 'searchList', 'searchName', 'searchResult'];
+  for (const field of requiredFields) {
     assertField(rule as unknown as Record<string, unknown>, field);
+  }
+  if (rule.searchMode === 'api') {
+    const config = rule.searchApiConfig;
+    if (!config?.request?.url || !config.listPath || !config.namePath || !config.sourcePath) {
+      throw new Error('Kazumi 规则缺少必需字段: searchApiConfig');
+    }
+  }
+  if (rule.chapterMode === 'api') {
+    const config = rule.chapterApiConfig;
+    if (!config?.request?.url || !['nested', 'delimited'].includes(config.format)) {
+      throw new Error('Kazumi 规则缺少必需字段: chapterApiConfig');
+    }
   }
   const baseUrl = rule.baseUrl || rule.baseURL;
   if (!baseUrl || typeof baseUrl !== 'string') {
@@ -78,6 +95,10 @@ export function adaptKazumi(rule: KazumiRule): AdaptedPlugin {
 const RULE = ${JSON.stringify(
     {
       baseUrl,
+      searchMode: rule.searchMode || 'xpath',
+      chapterMode: rule.chapterMode || 'xpath',
+      searchApiConfig: rule.searchApiConfig,
+      chapterApiConfig: rule.chapterApiConfig,
       searchURL: rule.searchURL,
       searchList: rule.searchList,
       searchName: rule.searchName,
@@ -105,7 +126,9 @@ HEADERS['Referer'] = RULE.referer || RULE.baseUrl;
 
 function absolutize(url) {
   if (!url) return '';
+  if (url.startsWith('//')) return RULE.baseUrl.split(':')[0] + ':' + url;
   if (url.startsWith('http')) return url;
+  if (url.startsWith('/')) return RULE.baseUrl.match(/^https?:\\/\\/[^/]+/)[0] + url;
   return RULE.baseUrl.replace(/\\/$/, '') + '/' + url.replace(/^\\//, '');
 }
 
@@ -125,8 +148,11 @@ function query(html, listSelector, subSelector) {
   }
 }
 
+${KAZUMI_API_RUNTIME}
+
 const plugin = {
   async explore(type) {
+    if (RULE.searchMode === 'api') return apiSearch('');
     // Fetch the site homepage (or custom exploreURL) and extract media items.
     // Strategy 1: Use explore-specific selectors if provided.
     // Strategy 2: Fall back to search selectors (works when site reuses template).
@@ -194,6 +220,7 @@ const plugin = {
   },
 
   async search(queryKeyword) {
+    if (RULE.searchMode === 'api') return apiSearch(queryKeyword);
     const url = RULE.searchURL.replace(/@keyword|\\{keyword\\}/g, encodeURIComponent(queryKeyword));
     const html = await fetch(url, { headers: HEADERS }).then(r => r.text());
 
@@ -213,6 +240,7 @@ const plugin = {
   },
 
   async getDetail(mediaId) {
+    if (RULE.chapterMode === 'api') return apiDetail(mediaId);
     const pageUrl = absolutize(decodeURIComponent(mediaId));
     const html = await fetch(pageUrl, { headers: HEADERS }).then(r => r.text());
     // Try multiple strategies to extract cover image
@@ -238,6 +266,7 @@ const plugin = {
   },
 
   async getChapters(mediaId) {
+    if (RULE.chapterMode === 'api') return apiChapters(mediaId);
     if (!RULE.chapterRoads || !RULE.chapterResult) return [];
     const pageUrl = absolutize(decodeURIComponent(mediaId));
     const html = await fetch(pageUrl, { headers: HEADERS }).then(r => r.text());
@@ -245,7 +274,8 @@ const plugin = {
     const isXPath = RULE.chapterRoads.startsWith('/') || RULE.chapterRoads.startsWith('//');
     let list = [];
     if (isXPath) {
-      const roads = JSON.parse(htmlParser.select(html, RULE.chapterRoads) || '[]');
+      let roads = JSON.parse(htmlParser.select(html, RULE.chapterRoads) || '[]');
+      if (!roads.length) roads = [{ html }];
       roads.forEach((road, roadIndex) => {
         const sub = JSON.parse(htmlParser.select(road.html, RULE.chapterResult) || '[]');
         const prefix = roads.length > 1 ? ('线路' + (roadIndex + 1) + '·') : '';
@@ -266,6 +296,7 @@ const plugin = {
 
   async getVideoUrl(chapterId) {
     const pageUrl = absolutize(decodeURIComponent(chapterId));
+    if (/\\.(m3u8|mp4|flv|webm)(?:[?#]|$)/i.test(pageUrl)) return [{ quality: '默认', url: pageUrl }];
 
     // Step 1: Fetch the play page HTML first (fast, ~1-2s).
     // We need it for player_aaaa parsing anyway, and it tells us whether
@@ -331,44 +362,6 @@ globalThis.plugin = plugin;
   };
 }
 
-// Minimal Venera runtime implemented on top of the Titanhub sandbox (fetch + htmlParser).
-// Covers ComicSource base, Network, HtmlDocument/HtmlElement and log; UI/APP/storage are no-ops.
-const VENERA_SHIM = `// ---- Venera runtime shim (Titanhub) ----
-class ComicSource {
-  loadData() { return null }
-  loadSetting() { return null }
-  saveData() {}
-  deleteData() {}
-  get isLogged() { return false }
-}
-function log(...args) { console.log(...args) }
-let Convert = {};
-let Network = {
-  async _request(method, url, headers, data) {
-    const res = await fetch(url, { method, headers: headers || {}, body: data });
-    return { status: res.status, headers: {}, body: await res.text() };
-  },
-  get(url, headers) { return this._request('GET', url, headers) },
-  post(url, headers, data) { return this._request('POST', url, headers, data) },
-  put(url, headers, data) { return this._request('PUT', url, headers, data) },
-  delete(url, headers) { return this._request('DELETE', url, headers) },
-};
-class HtmlElement {
-  constructor(data) { this._d = data || {} }
-  get text() { return this._d.text || '' }
-  get attributes() { return this._d.attrs || {} }
-  querySelector() { throw new Error('Titanhub shim 不支持元素级嵌套选择，请对文档使用组合选择器。') }
-  querySelectorAll() { throw new Error('Titanhub shim 不支持元素级嵌套选择，请对文档使用组合选择器。') }
-}
-class HtmlDocument {
-  constructor(html) { this._html = html }
-  querySelectorAll(q) { return JSON.parse(htmlParser.select(this._html, q)).map(d => new HtmlElement(d)) }
-  querySelector(q) { const list = this.querySelectorAll(q); return list.length > 0 ? list[0] : null }
-  getElementById(id) { return this.querySelector('#' + id) }
-  dispose() {}
-}
-// ---- end Venera shim ----`;
-
 function veneraClassBridge(className: string): string {
   return `
 const __veneraInstance = new ${className}();
@@ -394,6 +387,7 @@ function __veneraTagsToGenres(tags) {
 globalThis.plugin = {
   async search(query) {
     if (!__veneraInstance.search || !__veneraInstance.search.load) return [];
+    await __veneraInitialize(__veneraInstance);
     const res = await __veneraInstance.search.load(query, [], 1);
     const comics = (res && res.comics) || [];
     return comics.map(c => ({
@@ -404,6 +398,7 @@ globalThis.plugin = {
     }));
   },
   async getDetail(mediaId) {
+    await __veneraInitialize(__veneraInstance);
     const d = await __veneraInstance.comic.loadInfo(mediaId);
     return {
       id: mediaId,
@@ -415,6 +410,7 @@ globalThis.plugin = {
     };
   },
   async getChapters(mediaId) {
+    await __veneraInitialize(__veneraInstance);
     const d = await __veneraInstance.comic.loadInfo(mediaId);
     const ch = d.chapters;
     if (!ch) return [{ id: mediaId + '::', title: '全一话', chapterNo: 1 }];
@@ -428,6 +424,7 @@ globalThis.plugin = {
     }));
   },
   async getImages(chapterId) {
+    await __veneraInitialize(__veneraInstance);
     const sep = chapterId.indexOf('::');
     const comicId = sep >= 0 ? chapterId.slice(0, sep) : chapterId;
     const epId = sep >= 0 ? chapterId.slice(sep + 2) : null;
@@ -445,305 +442,8 @@ globalThis.plugin = {
  * (class X extends ComicSource) run against a bundled Venera runtime shim:
  * Network maps to sandbox fetch, HtmlDocument to the host cheerio bridge.
  * Chapter ids are encoded as "comicId::epId" to fit loadEp's two-argument shape.
- * Shim limitations: no element-level nested selectors, no UI/APP/storage APIs.
  */
-// ─── LNReader Runtime Shim (ported from mangayomi's LNReader adapter) ───
-//
-// LNReader plugins use a CommonJS-style require() system with packages like
-// cheerio, htmlparser2, dayjs, @libs/fetch, etc. This shim maps those to
-// Titanhub's sandbox-provided primitives (fetch + htmlParser) and provides
-// the polyfills LNReader plugins expect (FormData, URLSearchParams, etc.).
-const LNREADER_SHIM = `// ---- LNReader runtime shim (Titanhub) ----
 
-// ── Polyfills ──
-class FormData {
-  constructor() { this.params = {}; }
-  append(key, value) { this.params[key] = value; }
-  toJSON() { return this.params; }
-}
-
-// ── cheerio shim (maps to Titanhub's htmlParser) ──
-function load(html) {
-  return {
-    _html: html,
-    text() {
-      // Get all text content
-      const results = JSON.parse(htmlParser.select(this._html, 'body') || '[]');
-      return results.map(r => r.text).join(' ');
-    },
-    html() { return this._html; },
-    find(selector) {
-      const results = JSON.parse(htmlParser.select(this._html, selector) || '[]');
-      return results.map(r => ({
-        _html: r.html,
-        _text: r.text,
-        _attrs: r.attrs,
-        text() { return this._text; },
-        html() { return this._html; },
-        attr(name) { return (this._attrs && this._attrs[name]) || ''; },
-        find(subSelector) {
-          const sub = JSON.parse(htmlParser.select(this._html, subSelector) || '[]');
-          return sub.map(s => ({
-            _html: s.html, _text: s.text, _attrs: s.attrs,
-            text() { return this._text; },
-            html() { return this._html; },
-            attr(name) { return (this._attrs && this._attrs[name]) || ''; },
-          }));
-        },
-        first() { return this; },
-        each(fn) { fn(0, this); return this; },
-      }));
-    },
-    first(selector) {
-      if (!selector) return this;
-      const result = htmlParser.selectOne(this._html, selector);
-      if (!result) return null;
-      const r = JSON.parse(result);
-      return {
-        _html: r.html, _text: r.text, _attrs: r.attrs,
-        text() { return this._text; },
-        html() { return this._html; },
-        attr(name) { return (this._attrs && this._attrs[name]) || ''; },
-      };
-    },
-    each(fn) {
-      // cheerio .each on the root document is rarely used; no-op fallback
-      return this;
-    },
-  };
-}
-
-// ── htmlparser2 shim ──
-class Parser {
-  constructor(options = {}) {
-    this.options = options;
-    this._html = '';
-  }
-  write(html) { this._html += html; }
-  end() {
-    // Simplified: use cheerio to parse and emit events
-    if (this.options.onend) this.options.onend();
-  }
-}
-
-// ── dayjs shim (minimal) ──
-function dayjs(date) {
-  const d = date ? new Date(date) : new Date();
-  return {
-    _d: d,
-    format(fmt) {
-      if (!fmt) return d.toISOString();
-      return fmt
-        .replace('YYYY', d.getFullYear())
-        .replace('MM', String(d.getMonth() + 1).padStart(2, '0'))
-        .replace('DD', String(d.getDate()).padStart(2, '0'))
-        .replace('HH', String(d.getHours()).padStart(2, '0'))
-        .replace('mm', String(d.getMinutes()).padStart(2, '0'))
-        .replace('ss', String(d.getSeconds()).padStart(2, '0'));
-    },
-   toISOString() { return d.toISOString(); },
-    unix() { return Math.floor(d.getTime() / 1000); },
-  };
-}
-dayjs.extend = function() { return dayjs; };
-
-// ── fetchApi (maps to sandbox fetch) ──
-async function fetchApi(url, init) {
-  const method = (init && init.method) || 'GET';
-  const headers = (init && init.headers) || {};
-  const body = init && init.body;
-  const res = await fetch(url, { method, headers, body });
-  return {
-    status: res.status,
-    ok: res.status >= 200 && res.status <= 299,
-    headers: { get: (name) => null },
-    async text() { return res.text(); },
-    async json() { return JSON.parse(await res.text()); },
-  };
-}
-
-// ── NovelStatus constants ──
-const NovelStatus = {
-  ONGOING: 0,
-  COMPLETED: 1,
-  CANCELLED: 2,
-  UNKNOWN: 3,
-};
-
-// ── Helper functions ──
-function isUrlAbsolute(url) {
-  return url && (url.startsWith('http://') || url.startsWith('https://'));
-}
-
-function defaultCover() {
-  return 'https://raw.githubusercontent.com/LNReader/lnreader-plugins/refs/heads/master/public/static/coverNotAvailable.webp';
-}
-
-// ── Filter types ──
-const FilterTypes = {
-  Picker: 'picker',
-  Checkbox: 'checkbox',
-  Switch: 'switch',
-  Text: 'text',
-  XCheckbox: 'xcheckbox',
-};
-function isPickerValue(v) { return v && v.type === FilterTypes.Picker; }
-function isCheckboxValue(v) { return v && v.type === FilterTypes.CheckBox; }
-function isSwitchValue(v) { return v && v.type === FilterTypes.Switch; }
-function isTextValue(v) { return v && v.type === FilterTypes.Text; }
-function isXCheckboxValue(v) { return v && v.type === FilterTypes.XCheckbox; }
-
-// ── Storage shim (in-memory only, resets per sandbox invocation) ──
-const storage = {
-  _data: {},
-  get(key) { return this._data[key] || null; },
-  set(key, value) { this._data[key] = value; },
-  remove(key) { delete this._data[key]; },
-};
-
-// ── require() shim ──
-const module = { exports: {} };
-const exports = module.exports;
-function require(pkg) {
-  switch (pkg) {
-    case 'cheerio': return { load };
-    case 'htmlparser2': return { Parser };
-    case 'dayjs': return dayjs;
-    case 'urlencode':
-      return { encode: encodeURIComponent, decode: decodeURIComponent };
-    case '@libs/fetch': return { fetchApi };
-    case '@libs/novelStatus': return { NovelStatus };
-    case '@libs/isAbsoluteUrl': return { isUrlAbsolute };
-    case '@libs/filterInputs':
-      return { FilterTypes, isPickerValue, isCheckboxValue, isSwitchValue, isTextValue, isXCheckboxValue };
-    case '@libs/defaultCover': return { defaultCover };
-    case '@libs/storage': return { storage };
-    default:
-      if (pkg.startsWith('@') ) return {};
-      throw new Error('Unknown module: ' + pkg);
-  }
-}
-
-// ── String extensions (ported from mangayomi JsLibs) ──
-String.prototype.substringAfter = function(pattern) {
-  const idx = this.indexOf(pattern);
-  return idx === -1 ? this.substring(0) : this.substring(idx + pattern.length);
-};
-String.prototype.substringAfterLast = function(pattern) {
-  return this.split(pattern).pop();
-};
-String.prototype.substringBefore = function(pattern) {
-  const idx = this.indexOf(pattern);
-  return idx === -1 ? this.substring(0) : this.substring(0, idx);
-};
-String.prototype.substringBeforeLast = function(pattern) {
-  const idx = this.lastIndexOf(pattern);
-  return idx === -1 ? this.substring(0) : this.substring(0, idx);
-};
-
-// ---- end LNReader shim ----`;
-
-function lnreaderBridge(): string {
-  return `
-// ── LNReader -> Titanhub plugin bridge ──
-// LNReader plugins export a class or object with methods like:
-//   popularNovels(page), parseNovelAndChapters(novelUrl),
-//   parseChapter(chapterUrl), searchNovels(query, page)
-// We detect the exported instance and map to Titanhub's plugin interface.
-
-const __lnr = (typeof source !== 'undefined') ? source
-  : (typeof plugin !== 'undefined') ? plugin
-  : (typeof extension !== 'undefined') ? extension
-  : null;
-
-if (!__lnr) {
-  throw new Error('LNReader source did not register a global (source/plugin/extension).');
-}
-
-function __resolveUrl(url, baseUrl) {
-  if (!url) return '';
-  if (url.startsWith('http')) return url;
-  if (url.startsWith('//')) return 'https:' + url;
-  if (url.startsWith('/')) return (baseUrl || '').replace(/\\/$/, '') + url;
-  return (baseUrl || '').replace(/\\/$/, '') + '/' + url;
-}
-
-function __getBaseUrl() {
-  if (__lnr.source && __lnr.source.site) return __lnr.source.site;
-  if (__lnr.baseUrl) return __lnr.baseUrl;
-  if (__lnr.source && __lnr.source.baseURL) return __lnr.source.baseURL;
-  return '';
-}
-
-globalThis.plugin = {
-  async search(query) {
-    const fn = __lnr.searchNovels || __lnr.search;
-    if (!fn) return [];
-    const results = await fn.call(__lnr, query, 1);
-    const baseUrl = __getBaseUrl();
-    return (results || []).map(r => ({
-      id: String(r.path || r.url || r.id || ''),
-      title: r.name || r.title || '未命名',
-      cover: __resolveUrl(r.cover || r.coverUrl, baseUrl),
-      description: r.summary || r.description || '',
-    }));
-  },
-
-  async explore(type) {
-    if (type !== 'novel') return [];
-    const fn = __lnr.popularNovels || __lnr.getPopularNovels;
-    if (!fn) return [];
-    const results = await fn.call(__lnr, 1);
-    const baseUrl = __getBaseUrl();
-    return (results || []).map(r => ({
-      id: String(r.path || r.url || r.id || ''),
-      title: r.name || r.title || '未命名',
-      cover: __resolveUrl(r.cover || r.coverUrl, baseUrl),
-      description: r.summary || r.description || '',
-    }));
-  },
-
-  async getDetail(mediaId) {
-    const fn = __lnr.parseNovelAndChapters || __lnr.getNovel;
-    if (!fn) return { id: mediaId, title: mediaId, cover: '' };
-    const novel = await fn.call(__lnr, mediaId);
-    const baseUrl = __getBaseUrl();
-    return {
-      id: mediaId,
-      title: novel.name || novel.title || mediaId,
-      cover: __resolveUrl(novel.cover || novel.coverUrl, baseUrl),
-      description: novel.summary || novel.description || '',
-      author: novel.author || undefined,
-      status: novel.status !== undefined ? String(novel.status) : undefined,
-      genres: novel.genres ? (Array.isArray(novel.genres) ? novel.genels : String(novel.genres).split(/[,\\s]+/)) : undefined,
-    };
-  },
-
-  async getChapters(mediaId) {
-    const fn = __lnr.parseNovelAndChapters || __lnr.getNovel;
-    if (!fn) return [];
-    const novel = await fn.call(__lnr, mediaId);
-    const chapters = novel.chapters || [];
-    return chapters.map((ch, i) => ({
-      id: String(ch.path || ch.url || ch.id || i),
-      title: ch.name || ch.title || ('第 ' + (i + 1) + ' 章'),
-      chapterNo: ch.chapterNumber || (i + 1),
-    }));
-  },
-
-  async getContent(chapterId) {
-    const fn = __lnr.parseChapter || __lnr.getChapter;
-    if (!fn) return '';
-    const content = await fn.call(__lnr, chapterId);
-    // parseChapter can return a string (HTML/text) or an object with text/html
-    if (typeof content === 'string') return content;
-    if (content && content.text) return content.text;
-    if (content && content.html) return content.html;
-    return String(content || '');
-  },
-};
-`;
-}
 
 /**
  * Wraps an LNReader JavaScript source into Titanhub plugin source code.
@@ -764,8 +464,13 @@ export function adaptLNReader(
     name: meta.name,
     version: meta.version || '1.0.0',
     types: ['novel'],
-    code: `// Wrapped LNReader source "${meta.name}" by @titanhub/plugin-adapter\n${LNREADER_SHIM}\n\n${source}\n${lnreaderBridge()}`,
+    code: `// Wrapped LNReader source "${meta.name}" by @titanhub/plugin-adapter\n${LNREADER_SHIM}\n\n${wrapLNReaderSource(source)}\n${lnreaderBridge()}`,
   };
+}
+
+export function upgradeLegacyLNReaderCode(code: string, meta: { id: string; name: string; version?: string }): string | null {
+  const source = extractLegacyLNReaderSource(code);
+  return source === null ? null : adaptLNReader(source, meta).code;
 }
 
 export function adaptVenera(

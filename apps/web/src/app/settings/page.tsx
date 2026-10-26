@@ -11,10 +11,16 @@ import {
   User as UserIcon,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
-import { API_BASE } from '@/lib/config';
+import { getApiBase } from '@/lib/config';
+import { useLocalSessionStore } from '@/stores/localSessionStore';
+import { useSyncStore } from '@/stores/syncStore';
+import WebDavSettings from '@/components/WebDavSettings';
 
 export default function SettingsPage() {
   const { user, logout } = useAuthStore();
+  const localStatus = useLocalSessionStore((state) => state.status);
+  const localMode = localStatus !== 'idle';
+  const pendingWrites = useSyncStore((state) => state.pendingWrites);
   const [cleared, setCleared] = useState(false);
 
   const clearLocalCache = () => {
@@ -43,9 +49,16 @@ export default function SettingsPage() {
         <section className="rounded-xl bg-surface border border-borderSubtle p-6 mb-4 shadow-card">
           <h2 className="text-xs font-medium text-textTertiary uppercase tracking-wider mb-4 flex items-center">
             <UserIcon className="h-4 w-4 mr-2" />
-            账号
+            {localMode ? '本地资料' : '账号'}
           </h2>
-          {user ? (
+          {localMode ? (
+            <div className="text-sm text-textSecondary space-y-2">
+              <p>收藏和观看、阅读进度保存在当前设备，无需登录。</p>
+              <p>{localStatus === 'ready' ? '本地资料已连接' : localStatus === 'error' ? '本地资料连接失败，请重试' : '正在连接本地资料…'}</p>
+              <p>{pendingWrites > 0 ? `还有 ${pendingWrites} 项写入等待确认` : '没有待保存的修改'}</p>
+              <Link href="/tracking" className="inline-block text-primary">查看本地收藏与进度</Link>
+            </div>
+          ) : user ? (
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-full bg-gradient-to-tr from-primary to-accent flex items-center justify-center text-white font-bold">
@@ -71,6 +84,8 @@ export default function SettingsPage() {
           )}
         </section>
 
+        {localMode && <WebDavSettings />}
+
         <section className="rounded-2xl bg-surface border border-border p-6 mb-6">
           <h2 className="text-sm font-bold text-textSecondary uppercase tracking-wider mb-4 flex items-center">
             <Database className="h-4 w-4 mr-2" />
@@ -80,7 +95,7 @@ export default function SettingsPage() {
             <div>
               <p className="text-sm font-medium">清除本地缓存</p>
               <p className="text-xs text-textSecondary mt-1">
-                清除浏览器中保存的登录状态与本地数据（云端数据不受影响）。
+                {localMode ? '仅清除网页缓存与旧登录状态，设备中的收藏和进度会保留。' : '清除浏览器中保存的登录状态与本地数据（云端数据不受影响）。'}
               </p>
             </div>
             <button
@@ -101,7 +116,7 @@ export default function SettingsPage() {
             <p>Titanhub — ACG 全内容聚合平台</p>
             <p>
               API 服务器:{' '}
-              <code className="text-xs bg-surfaceLight px-1.5 py-0.5 rounded">{API_BASE}</code>
+              <code className="text-xs bg-surfaceLight px-1.5 py-0.5 rounded">{getApiBase()}</code>
             </p>
             <p>内容由已安装的沙箱插件动态提供，本应用不存储任何媒体资源。</p>
           </div>

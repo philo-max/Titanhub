@@ -1,6 +1,7 @@
 import './globals.css';
 import type { Metadata, Viewport } from 'next';
 import ServiceWorkerRegistrar from '../components/ServiceWorkerRegistrar';
+import LocalDataBootstrap from '../components/LocalDataBootstrap';
 
 export const metadata: Metadata = {
   title: 'Titanhub - ACG All-in-One Aggregation Platform',
@@ -22,6 +23,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="zh-CN">
       <body className="bg-background text-textPrimary min-h-screen antialiased">
         <ServiceWorkerRegistrar />
+        <LocalDataBootstrap />
         {children}
       </body>
     </html>

@@ -1,0 +1,861 @@
+{
+  "constants": {
+    "maxSafeInteger": 9007199254740991,
+    "maxSnapshotBytes": 8388608,
+    "maxRecords": 20000,
+    "maxStringLength": 8192
+  },
+  "mediaKey": [
+    {
+      "name": "plain",
+      "item": {
+        "mediaType": "anime",
+        "pluginId": "p",
+        "mediaId": "m"
+      },
+      "key": "[\"anime\",\"p\",\"m\"]"
+    },
+    {
+      "name": "pipe and quotes",
+      "item": {
+        "mediaType": "manga",
+        "pluginId": "a|b",
+        "mediaId": "x\"y\\z"
+      },
+      "key": "[\"manga\",\"a|b\",\"x\\\"y\\\\z\"]"
+    },
+    {
+      "name": "unicode",
+      "item": {
+        "mediaType": "novel",
+        "pluginId": "插件",
+        "mediaId": "😀é"
+      },
+      "key": "[\"novel\",\"插件\",\"😀é\"]"
+    },
+    {
+      "name": "control chars",
+      "item": {
+        "mediaType": "movie",
+        "pluginId": "\u0000\u001f",
+        "mediaId": "\n "
+      },
+      "key": "[\"movie\",\"\\u0000\\u001f\",\"\\n \"]"
+    },
+    {
+      "name": "lone surrogate",
+      "item": {
+        "mediaType": "anime",
+        "pluginId": "\udc00",
+        "mediaId": "a\ud800"
+      },
+      "key": "[\"anime\",\"\\udc00\",\"a\\ud800\"]"
+    }
+  ],
+  "compareVersions": [
+    {
+      "name": "counter dominates device",
+      "a": {
+        "counter": 2,
+        "deviceId": "a"
+      },
+      "b": {
+        "counter": 1,
+        "deviceId": "z"
+      },
+      "sign": 1
+    },
+    {
+      "name": "ascii device",
+      "a": {
+        "counter": 1,
+        "deviceId": "a"
+      },
+      "b": {
+        "counter": 1,
+        "deviceId": "b"
+      },
+      "sign": -1
+    },
+    {
+      "name": "prefix device shorter first",
+      "a": {
+        "counter": 1,
+        "deviceId": "a"
+      },
+      "b": {
+        "counter": 1,
+        "deviceId": "ab"
+      },
+      "sign": -1
+    },
+    {
+      "name": "utf8 not utf16 order",
+      "a": {
+        "counter": 1,
+        "deviceId": "｡"
+      },
+      "b": {
+        "counter": 1,
+        "deviceId": "😀"
+      },
+      "sign": -1
+    },
+    {
+      "name": "latin1 above ascii",
+      "a": {
+        "counter": 1,
+        "deviceId": "z"
+      },
+      "b": {
+        "counter": 1,
+        "deviceId": "é"
+      },
+      "sign": -1
+    },
+    {
+      "name": "equal",
+      "a": {
+        "counter": 5,
+        "deviceId": "é"
+      },
+      "b": {
+        "counter": 5,
+        "deviceId": "é"
+      },
+      "sign": 0
+    },
+    {
+      "name": "lone surrogate equals replacement char",
+      "a": {
+        "counter": 1,
+        "deviceId": "\ud800"
+      },
+      "b": {
+        "counter": 1,
+        "deviceId": "�"
+      },
+      "sign": 0
+    },
+    {
+      "name": "max safe counters",
+      "a": {
+        "counter": 9007199254740990,
+        "deviceId": "z"
+      },
+      "b": {
+        "counter": 9007199254740991,
+        "deviceId": "a"
+      },
+      "sign": -1
+    }
+  ],
+  "snapshots": [
+    {
+      "name": "favorite and progress keep separate versions",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"favorite\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":9,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"isDeleted\":false,\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\"},{\"kind\":\"progress\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":2,\"deviceId\":\"b\"},\"updatedAt\":\"2026-01-01\",\"chapterId\":\"c1\",\"chapterNo\":1,\"progress\":0.5,\"position\":90,\"status\":\"watching\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\"}]}",
+      "output": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"favorite\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":9,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"isDeleted\":false},{\"kind\":\"progress\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":2,\"deviceId\":\"b\"},\"updatedAt\":\"2026-01-01\",\"chapterId\":\"c1\",\"chapterNo\":1,\"progress\":0.5,\"position\":90,\"status\":\"watching\"}]}"
+    },
+    {
+      "name": "extra fields stripped and field order canonicalized",
+      "input": "{\"generation\":1,\"extra\":1,\"deviceId\":\"dev\",\"schemaVersion\":1,\"records\":[{\"extra\":true,\"isDeleted\":false,\"updatedAt\":\"u\",\"version\":{\"deviceId\":\"a\",\"counter\":1,\"x\":1},\"mediaId\":\"m\",\"pluginId\":\"p\",\"mediaType\":\"anime\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\",\"kind\":\"favorite\",\"chapterNo\":\"ignored\"}]}",
+      "output": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"favorite\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"u\",\"isDeleted\":false}]}"
+    },
+    {
+      "name": "integral floats and exponents are integers",
+      "input": "{\"schemaVersion\":1.0,\"deviceId\":\"dev\",\"generation\":1e2,\"records\":[{\"kind\":\"progress\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":1e0,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"chapterId\":\"c1\",\"chapterNo\":1.0,\"progress\":0.5,\"position\":9e1,\"status\":\"watching\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\"}]}",
+      "output": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":100,\"records\":[{\"kind\":\"progress\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"chapterId\":\"c1\",\"chapterNo\":1,\"progress\":0.5,\"position\":90,\"status\":\"watching\"}]}"
+    },
+    {
+      "name": "negative zero normalizes to zero",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"progress\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":-0,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"chapterId\":\"c1\",\"chapterNo\":1,\"progress\":-0.0,\"position\":90,\"status\":\"watching\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\"}]}",
+      "output": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"progress\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":0,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"chapterId\":\"c1\",\"chapterNo\":1,\"progress\":0,\"position\":90,\"status\":\"watching\"}]}"
+    },
+    {
+      "name": "tiny and fractional numbers keep js formatting",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"progress\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"chapterId\":\"c1\",\"chapterNo\":1,\"progress\":1e-7,\"position\":0.000001,\"status\":\"watching\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\"},{\"kind\":\"progress\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"n\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"chapterId\":\"c1\",\"chapterNo\":1,\"progress\":0.30000000000000004,\"position\":123.456,\"status\":\"watching\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"n\\\"]\"}]}",
+      "output": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"progress\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"chapterId\":\"c1\",\"chapterNo\":1,\"progress\":1e-7,\"position\":0.000001,\"status\":\"watching\"},{\"kind\":\"progress\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"n\\\"]\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"n\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"chapterId\":\"c1\",\"chapterNo\":1,\"progress\":0.30000000000000004,\"position\":123.456,\"status\":\"watching\"}]}"
+    },
+    {
+      "name": "max safe integer accepted",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":9007199254740991,\"records\":[{\"kind\":\"progress\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":9007199254740991,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"chapterId\":\"c1\",\"chapterNo\":9007199254740991,\"progress\":0.5,\"position\":9007199254740991,\"status\":\"watching\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\"}]}",
+      "output": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":9007199254740991,\"records\":[{\"kind\":\"progress\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":9007199254740991,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"chapterId\":\"c1\",\"chapterNo\":9007199254740991,\"progress\":0.5,\"position\":9007199254740991,\"status\":\"watching\"}]}"
+    },
+    {
+      "name": "progress drops tombstone and favorite drops progress fields",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"progress\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"chapterId\":\"c1\",\"chapterNo\":1,\"progress\":0.5,\"position\":90,\"status\":\"watching\",\"isDeleted\":true,\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\"},{\"kind\":\"favorite\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"f\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"isDeleted\":false,\"chapterId\":\"x\",\"progress\":0.3,\"position\":1,\"status\":\"s\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"f\\\"]\"}]}",
+      "output": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"favorite\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"f\\\"]\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"f\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"isDeleted\":false},{\"kind\":\"progress\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"chapterId\":\"c1\",\"chapterNo\":1,\"progress\":0.5,\"position\":90,\"status\":\"watching\"}]}"
+    },
+    {
+      "name": "null position accepted",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"progress\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"chapterId\":\"c1\",\"chapterNo\":1,\"progress\":0.5,\"position\":null,\"status\":\"watching\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\"}]}",
+      "output": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"progress\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"chapterId\":\"c1\",\"chapterNo\":1,\"progress\":0.5,\"position\":null,\"status\":\"watching\"}]}"
+    },
+    {
+      "name": "novel and manga position bounds",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"progress\",\"mediaType\":\"novel\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"chapterId\":\"c1\",\"chapterNo\":1,\"progress\":0.5,\"position\":1,\"status\":\"watching\",\"key\":\"[\\\"novel\\\",\\\"p\\\",\\\"m\\\"]\"},{\"kind\":\"progress\",\"mediaType\":\"manga\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"chapterId\":\"c1\",\"chapterNo\":1,\"progress\":0.5,\"position\":12,\"status\":\"watching\",\"key\":\"[\\\"manga\\\",\\\"p\\\",\\\"m\\\"]\"}]}",
+      "output": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"progress\",\"key\":\"[\\\"manga\\\",\\\"p\\\",\\\"m\\\"]\",\"mediaType\":\"manga\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"chapterId\":\"c1\",\"chapterNo\":1,\"progress\":0.5,\"position\":12,\"status\":\"watching\"},{\"kind\":\"progress\",\"key\":\"[\\\"novel\\\",\\\"p\\\",\\\"m\\\"]\",\"mediaType\":\"novel\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"chapterId\":\"c1\",\"chapterNo\":1,\"progress\":0.5,\"position\":1,\"status\":\"watching\"}]}"
+    },
+    {
+      "name": "sort uses utf16 order of kind and key",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"favorite\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"｡\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"isDeleted\":false,\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"｡\\\"]\"},{\"kind\":\"favorite\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"😀\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"isDeleted\":false,\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"😀\\\"]\"},{\"kind\":\"progress\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"a\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"chapterId\":\"c1\",\"chapterNo\":1,\"progress\":0.5,\"position\":90,\"status\":\"watching\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"a\\\"]\"},{\"kind\":\"favorite\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"B\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"isDeleted\":false,\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"B\\\"]\"}]}",
+      "output": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"favorite\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"B\\\"]\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"B\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"isDeleted\":false},{\"kind\":\"favorite\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"😀\\\"]\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"😀\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"isDeleted\":false},{\"kind\":\"favorite\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"｡\\\"]\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"｡\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"isDeleted\":false},{\"kind\":\"progress\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"a\\\"]\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"a\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"chapterId\":\"c1\",\"chapterNo\":1,\"progress\":0.5,\"position\":90,\"status\":\"watching\"}]}"
+    },
+    {
+      "name": "equal counter tie broken by utf8 bytes of deviceId",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"favorite\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":3,\"deviceId\":\"｡\"},\"updatedAt\":\"2026-01-01\",\"isDeleted\":false,\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\"},{\"kind\":\"favorite\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":3,\"deviceId\":\"😀\"},\"updatedAt\":\"2026-01-01\",\"isDeleted\":true,\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\"}]}",
+      "output": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"favorite\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":3,\"deviceId\":\"😀\"},\"updatedAt\":\"2026-01-01\",\"isDeleted\":true}]}"
+    },
+    {
+      "name": "higher counter wins over device and wall clock",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"favorite\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":4,\"deviceId\":\"a\"},\"updatedAt\":\"2000-01-01\",\"isDeleted\":false,\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\"},{\"kind\":\"favorite\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":3,\"deviceId\":\"zz\"},\"updatedAt\":\"2099-01-01\",\"isDeleted\":true,\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\"}]}",
+      "output": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"favorite\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":4,\"deviceId\":\"a\"},\"updatedAt\":\"2000-01-01\",\"isDeleted\":false}]}"
+    },
+    {
+      "name": "escapes in media key and strings",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"favorite\",\"mediaType\":\"anime\",\"pluginId\":\"p\\\"\\\\/\",\"mediaId\":\"line\\n\\t\\u0001\\u001f é|x\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"\\b\\f\\r\",\"isDeleted\":false,\"key\":\"[\\\"anime\\\",\\\"p\\\\\\\"\\\\\\\\/\\\",\\\"line\\\\n\\\\t\\\\u0001\\\\u001f é|x\\\"]\"}]}",
+      "output": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"favorite\",\"key\":\"[\\\"anime\\\",\\\"p\\\\\\\"\\\\\\\\/\\\",\\\"line\\\\n\\\\t\\\\u0001\\\\u001f é|x\\\"]\",\"mediaType\":\"anime\",\"pluginId\":\"p\\\"\\\\/\",\"mediaId\":\"line\\n\\t\\u0001\\u001f é|x\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"\\b\\f\\r\",\"isDeleted\":false}]}"
+    },
+    {
+      "name": "lone surrogates are escaped",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"\\ud83d\",\"generation\":1,\"records\":[{\"kind\":\"favorite\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"a\\ud800b\\udc00\",\"version\":{\"counter\":1,\"deviceId\":\"d\\udbff\"},\"updatedAt\":\"2026-01-01\",\"isDeleted\":false,\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"a\\\\ud800b\\\\udc00\\\"]\"}]}",
+      "output": "{\"schemaVersion\":1,\"deviceId\":\"\\ud83d\",\"generation\":1,\"records\":[{\"kind\":\"favorite\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"a\\\\ud800b\\\\udc00\\\"]\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"a\\ud800b\\udc00\",\"version\":{\"counter\":1,\"deviceId\":\"d\\udbff\"},\"updatedAt\":\"2026-01-01\",\"isDeleted\":false}]}"
+    },
+    {
+      "name": "nfc and nfd are distinct identities",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"favorite\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"é\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"isDeleted\":false,\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"é\\\"]\"},{\"kind\":\"favorite\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"é\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"isDeleted\":false,\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"é\\\"]\"}]}",
+      "output": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"favorite\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"é\\\"]\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"é\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"isDeleted\":false},{\"kind\":\"favorite\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"é\\\"]\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"é\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"isDeleted\":false}]}"
+    },
+    {
+      "name": "duplicate identical records deduplicate",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"favorite\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"isDeleted\":false,\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\"},{\"kind\":\"favorite\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"isDeleted\":false,\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\"}]}",
+      "output": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"favorite\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"isDeleted\":false}]}"
+    },
+    {
+      "name": "string at max length accepted",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"favorite\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\",\"isDeleted\":false,\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\"}]}",
+      "output": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"favorite\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\",\"isDeleted\":false}]}"
+    },
+    {
+      "name": "empty records accepted",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[]}",
+      "output": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[]}"
+    },
+    {
+      "name": "schemaVersion 2",
+      "input": "{\"schemaVersion\":2,\"deviceId\":\"dev\",\"generation\":1,\"records\":[]}",
+      "output": null
+    },
+    {
+      "name": "schemaVersion string",
+      "input": "{\"schemaVersion\":\"1\",\"deviceId\":\"dev\",\"generation\":1,\"records\":[]}",
+      "output": null
+    },
+    {
+      "name": "schemaVersion bool",
+      "input": "{\"schemaVersion\":true,\"deviceId\":\"dev\",\"generation\":1,\"records\":[]}",
+      "output": null
+    },
+    {
+      "name": "missing schemaVersion",
+      "input": "{\"deviceId\":\"dev\",\"generation\":1,\"records\":[]}",
+      "output": null
+    },
+    {
+      "name": "empty snapshot device",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"\",\"generation\":1,\"records\":[]}",
+      "output": null
+    },
+    {
+      "name": "snapshot device number",
+      "input": "{\"schemaVersion\":1,\"deviceId\":1,\"generation\":1,\"records\":[]}",
+      "output": null
+    },
+    {
+      "name": "generation negative",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":-1,\"records\":[]}",
+      "output": null
+    },
+    {
+      "name": "generation fractional",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1.5,\"records\":[]}",
+      "output": null
+    },
+    {
+      "name": "generation bool",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":true,\"records\":[]}",
+      "output": null
+    },
+    {
+      "name": "generation above max safe",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":9007199254740992,\"records\":[]}",
+      "output": null
+    },
+    {
+      "name": "records not array",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":{}}",
+      "output": null
+    },
+    {
+      "name": "top level array",
+      "input": "[]",
+      "output": null
+    },
+    {
+      "name": "top level null",
+      "input": "null",
+      "output": null
+    },
+    {
+      "name": "invalid json",
+      "input": "{\"schemaVersion\":1,",
+      "output": null
+    },
+    {
+      "name": "record is number",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[1]}",
+      "output": null
+    },
+    {
+      "name": "record is array",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[[]]}",
+      "output": null
+    },
+    {
+      "name": "record is null",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[null]}",
+      "output": null
+    },
+    {
+      "name": "unknown kind",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"bookmark\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"isDeleted\":false,\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\"}]}",
+      "output": null
+    },
+    {
+      "name": "version missing",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"favorite\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"updatedAt\":\"2026-01-01\",\"isDeleted\":false,\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\"}]}",
+      "output": null
+    },
+    {
+      "name": "version string",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"favorite\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":\"x\",\"updatedAt\":\"2026-01-01\",\"isDeleted\":false,\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\"}]}",
+      "output": null
+    },
+    {
+      "name": "version empty object",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"favorite\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{},\"updatedAt\":\"2026-01-01\",\"isDeleted\":false,\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\"}]}",
+      "output": null
+    },
+    {
+      "name": "counter above max safe",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"favorite\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":9007199254740992,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"isDeleted\":false,\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\"}]}",
+      "output": null
+    },
+    {
+      "name": "counter far above max safe",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"favorite\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":123456789012345678901234567890,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"isDeleted\":false,\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\"}]}",
+      "output": null
+    },
+    {
+      "name": "counter bool",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"favorite\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":true,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"isDeleted\":false,\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\"}]}",
+      "output": null
+    },
+    {
+      "name": "counter string",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"favorite\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":\"1\",\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"isDeleted\":false,\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\"}]}",
+      "output": null
+    },
+    {
+      "name": "counter negative",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"favorite\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":-1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"isDeleted\":false,\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\"}]}",
+      "output": null
+    },
+    {
+      "name": "counter fractional",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"favorite\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":1.5,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"isDeleted\":false,\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\"}]}",
+      "output": null
+    },
+    {
+      "name": "counter overflow to infinity",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"favorite\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":1e400,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"isDeleted\":false,\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\"}]}",
+      "output": null
+    },
+    {
+      "name": "empty version device",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"favorite\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":1,\"deviceId\":\"\"},\"updatedAt\":\"2026-01-01\",\"isDeleted\":false,\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\"}]}",
+      "output": null
+    },
+    {
+      "name": "key mismatch",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"favorite\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"isDeleted\":false,\"key\":\"bad\"}]}",
+      "output": null
+    },
+    {
+      "name": "key with whitespace",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"favorite\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"isDeleted\":false,\"key\":\"[\\\"anime\\\", \\\"p\\\", \\\"m\\\"]\"}]}",
+      "output": null
+    },
+    {
+      "name": "key with delimiter format",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"favorite\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"isDeleted\":false,\"key\":\"anime|p|m\"}]}",
+      "output": null
+    },
+    {
+      "name": "mediaId number",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"favorite\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":1,\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"isDeleted\":false,\"key\":\"[\\\"anime\\\",\\\"p\\\",1]\"}]}",
+      "output": null
+    },
+    {
+      "name": "string above max length",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"favorite\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\",\"isDeleted\":false,\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\"}]}",
+      "output": null
+    },
+    {
+      "name": "tombstone missing",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"favorite\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\"}]}",
+      "output": null
+    },
+    {
+      "name": "tombstone null",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"favorite\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"isDeleted\":null,\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\"}]}",
+      "output": null
+    },
+    {
+      "name": "tombstone number",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"favorite\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"isDeleted\":0,\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\"}]}",
+      "output": null
+    },
+    {
+      "name": "tombstone string",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"favorite\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"isDeleted\":\"false\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\"}]}",
+      "output": null
+    },
+    {
+      "name": "progress above one",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"progress\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"chapterId\":\"c1\",\"chapterNo\":1,\"progress\":1.0000001,\"position\":90,\"status\":\"watching\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\"}]}",
+      "output": null
+    },
+    {
+      "name": "progress negative",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"progress\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"chapterId\":\"c1\",\"chapterNo\":1,\"progress\":-0.1,\"position\":90,\"status\":\"watching\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\"}]}",
+      "output": null
+    },
+    {
+      "name": "progress bool",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"progress\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"chapterId\":\"c1\",\"chapterNo\":1,\"progress\":true,\"position\":90,\"status\":\"watching\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\"}]}",
+      "output": null
+    },
+    {
+      "name": "progress string",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"progress\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"chapterId\":\"c1\",\"chapterNo\":1,\"progress\":\"0.5\",\"position\":90,\"status\":\"watching\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\"}]}",
+      "output": null
+    },
+    {
+      "name": "chapterNo fractional",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"progress\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"chapterId\":\"c1\",\"chapterNo\":1.5,\"progress\":0.5,\"position\":90,\"status\":\"watching\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\"}]}",
+      "output": null
+    },
+    {
+      "name": "chapterNo bool",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"progress\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"chapterId\":\"c1\",\"chapterNo\":false,\"progress\":0.5,\"position\":90,\"status\":\"watching\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\"}]}",
+      "output": null
+    },
+    {
+      "name": "chapterId missing",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"progress\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"chapterNo\":1,\"progress\":0.5,\"position\":90,\"status\":\"watching\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\"}]}",
+      "output": null
+    },
+    {
+      "name": "status null",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"progress\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"chapterId\":\"c1\",\"chapterNo\":1,\"progress\":0.5,\"position\":90,\"status\":null,\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\"}]}",
+      "output": null
+    },
+    {
+      "name": "position missing",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"progress\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"chapterId\":\"c1\",\"chapterNo\":1,\"progress\":0.5,\"status\":\"watching\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\"}]}",
+      "output": null
+    },
+    {
+      "name": "position bool",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"progress\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"chapterId\":\"c1\",\"chapterNo\":1,\"progress\":0.5,\"position\":true,\"status\":\"watching\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\"}]}",
+      "output": null
+    },
+    {
+      "name": "position above max safe",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"progress\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"chapterId\":\"c1\",\"chapterNo\":1,\"progress\":0.5,\"position\":9007199254740992,\"status\":\"watching\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\"}]}",
+      "output": null
+    },
+    {
+      "name": "position infinity",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"progress\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"chapterId\":\"c1\",\"chapterNo\":1,\"progress\":0.5,\"position\":1e400,\"status\":\"watching\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\"}]}",
+      "output": null
+    },
+    {
+      "name": "novel position above one",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"progress\",\"mediaType\":\"novel\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"chapterId\":\"c1\",\"chapterNo\":1,\"progress\":0.5,\"position\":2,\"status\":\"watching\",\"key\":\"[\\\"novel\\\",\\\"p\\\",\\\"m\\\"]\"}]}",
+      "output": null
+    },
+    {
+      "name": "manga position fractional",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"progress\",\"mediaType\":\"manga\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"chapterId\":\"c1\",\"chapterNo\":1,\"progress\":0.5,\"position\":1.5,\"status\":\"watching\",\"key\":\"[\\\"manga\\\",\\\"p\\\",\\\"m\\\"]\"}]}",
+      "output": null
+    },
+    {
+      "name": "conflicting equal versions",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"favorite\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"isDeleted\":false,\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\"},{\"kind\":\"favorite\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"isDeleted\":true,\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\"}]}",
+      "output": null
+    },
+    {
+      "name": "conflicting equal versions via lone surrogate utf8",
+      "input": "{\"schemaVersion\":1,\"deviceId\":\"dev\",\"generation\":1,\"records\":[{\"kind\":\"favorite\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":1,\"deviceId\":\"\\ud800\"},\"updatedAt\":\"2026-01-01\",\"isDeleted\":false,\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\"},{\"kind\":\"favorite\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":1,\"deviceId\":\"�\"},\"updatedAt\":\"2026-01-01\",\"isDeleted\":false,\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\"}]}",
+      "output": null
+    }
+  ],
+  "merges": [
+    {
+      "name": "tombstone with higher version wins",
+      "groups": [
+        [
+          {
+            "kind": "favorite",
+            "mediaType": "anime",
+            "pluginId": "p",
+            "mediaId": "m",
+            "version": {
+              "counter": 1,
+              "deviceId": "a"
+            },
+            "updatedAt": "2026-01-01",
+            "isDeleted": false,
+            "key": "[\"anime\",\"p\",\"m\"]"
+          }
+        ],
+        [
+          {
+            "kind": "favorite",
+            "mediaType": "anime",
+            "pluginId": "p",
+            "mediaId": "m",
+            "version": {
+              "counter": 2,
+              "deviceId": "b"
+            },
+            "updatedAt": "2026-01-01",
+            "isDeleted": true,
+            "key": "[\"anime\",\"p\",\"m\"]"
+          }
+        ]
+      ],
+      "output": "[{\"kind\":\"favorite\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":2,\"deviceId\":\"b\"},\"updatedAt\":\"2026-01-01\",\"isDeleted\":true}]"
+    },
+    {
+      "name": "revive after tombstone",
+      "groups": [
+        [
+          {
+            "kind": "favorite",
+            "mediaType": "anime",
+            "pluginId": "p",
+            "mediaId": "m",
+            "version": {
+              "counter": 2,
+              "deviceId": "b"
+            },
+            "updatedAt": "2026-01-01",
+            "isDeleted": true,
+            "key": "[\"anime\",\"p\",\"m\"]"
+          }
+        ],
+        [
+          {
+            "kind": "favorite",
+            "mediaType": "anime",
+            "pluginId": "p",
+            "mediaId": "m",
+            "version": {
+              "counter": 3,
+              "deviceId": "a"
+            },
+            "updatedAt": "2026-01-01",
+            "isDeleted": false,
+            "key": "[\"anime\",\"p\",\"m\"]"
+          }
+        ]
+      ],
+      "output": "[{\"kind\":\"favorite\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":3,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"isDeleted\":false}]"
+    },
+    {
+      "name": "progress restart wins by version despite clock skew",
+      "groups": [
+        [
+          {
+            "kind": "progress",
+            "mediaType": "anime",
+            "pluginId": "p",
+            "mediaId": "m",
+            "version": {
+              "counter": 1,
+              "deviceId": "a"
+            },
+            "updatedAt": "2099-01-01",
+            "chapterId": "c1",
+            "chapterNo": 1,
+            "progress": 0.9,
+            "position": 90,
+            "status": "watching",
+            "key": "[\"anime\",\"p\",\"m\"]"
+          }
+        ],
+        [
+          {
+            "kind": "progress",
+            "mediaType": "anime",
+            "pluginId": "p",
+            "mediaId": "m",
+            "version": {
+              "counter": 2,
+              "deviceId": "b"
+            },
+            "updatedAt": "2000-01-01",
+            "chapterId": "c1",
+            "chapterNo": 1,
+            "progress": 0.1,
+            "position": 10,
+            "status": "watching",
+            "key": "[\"anime\",\"p\",\"m\"]"
+          }
+        ]
+      ],
+      "output": "[{\"kind\":\"progress\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":2,\"deviceId\":\"b\"},\"updatedAt\":\"2000-01-01\",\"chapterId\":\"c1\",\"chapterNo\":1,\"progress\":0.1,\"position\":10,\"status\":\"watching\"}]"
+    },
+    {
+      "name": "favorite and progress for same media are independent",
+      "groups": [
+        [
+          {
+            "kind": "favorite",
+            "mediaType": "anime",
+            "pluginId": "p",
+            "mediaId": "m",
+            "version": {
+              "counter": 7,
+              "deviceId": "a"
+            },
+            "updatedAt": "2026-01-01",
+            "isDeleted": true,
+            "key": "[\"anime\",\"p\",\"m\"]"
+          }
+        ],
+        [
+          {
+            "kind": "progress",
+            "mediaType": "anime",
+            "pluginId": "p",
+            "mediaId": "m",
+            "version": {
+              "counter": 1,
+              "deviceId": "b"
+            },
+            "updatedAt": "2026-01-01",
+            "chapterId": "c1",
+            "chapterNo": 1,
+            "progress": 0.5,
+            "position": 90,
+            "status": "watching",
+            "key": "[\"anime\",\"p\",\"m\"]"
+          }
+        ]
+      ],
+      "output": "[{\"kind\":\"favorite\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":7,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"isDeleted\":true},{\"kind\":\"progress\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":1,\"deviceId\":\"b\"},\"updatedAt\":\"2026-01-01\",\"chapterId\":\"c1\",\"chapterNo\":1,\"progress\":0.5,\"position\":90,\"status\":\"watching\"}]"
+    },
+    {
+      "name": "equal version reordered fields dedupe",
+      "groups": [
+        [
+          {
+            "kind": "favorite",
+            "mediaType": "anime",
+            "pluginId": "p",
+            "mediaId": "m",
+            "version": {
+              "counter": 1,
+              "deviceId": "a"
+            },
+            "updatedAt": "2026-01-01",
+            "isDeleted": false,
+            "key": "[\"anime\",\"p\",\"m\"]"
+          }
+        ],
+        [
+          {
+            "key": "[\"anime\",\"p\",\"m\"]",
+            "isDeleted": false,
+            "updatedAt": "2026-01-01",
+            "version": {
+              "counter": 1,
+              "deviceId": "a"
+            },
+            "mediaId": "m",
+            "pluginId": "p",
+            "mediaType": "anime",
+            "kind": "favorite"
+          }
+        ]
+      ],
+      "output": "[{\"kind\":\"favorite\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":1,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"isDeleted\":false}]"
+    },
+    {
+      "name": "equal version different payload rejected",
+      "groups": [
+        [
+          {
+            "kind": "favorite",
+            "mediaType": "anime",
+            "pluginId": "p",
+            "mediaId": "m",
+            "version": {
+              "counter": 1,
+              "deviceId": "a"
+            },
+            "updatedAt": "2026-01-01",
+            "isDeleted": false,
+            "key": "[\"anime\",\"p\",\"m\"]"
+          }
+        ],
+        [
+          {
+            "kind": "favorite",
+            "mediaType": "anime",
+            "pluginId": "p",
+            "mediaId": "m",
+            "version": {
+              "counter": 1,
+              "deviceId": "a"
+            },
+            "updatedAt": "2026-01-02",
+            "isDeleted": false,
+            "key": "[\"anime\",\"p\",\"m\"]"
+          }
+        ]
+      ],
+      "output": null
+    },
+    {
+      "name": "utf8 device tie break",
+      "groups": [
+        [
+          {
+            "kind": "favorite",
+            "mediaType": "anime",
+            "pluginId": "p",
+            "mediaId": "m",
+            "version": {
+              "counter": 3,
+              "deviceId": "😀"
+            },
+            "updatedAt": "2026-01-01",
+            "isDeleted": true,
+            "key": "[\"anime\",\"p\",\"m\"]"
+          }
+        ],
+        [
+          {
+            "kind": "favorite",
+            "mediaType": "anime",
+            "pluginId": "p",
+            "mediaId": "m",
+            "version": {
+              "counter": 3,
+              "deviceId": "｡"
+            },
+            "updatedAt": "2026-01-01",
+            "isDeleted": false,
+            "key": "[\"anime\",\"p\",\"m\"]"
+          }
+        ]
+      ],
+      "output": "[{\"kind\":\"favorite\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":3,\"deviceId\":\"😀\"},\"updatedAt\":\"2026-01-01\",\"isDeleted\":true}]"
+    },
+    {
+      "name": "ascii device tie break",
+      "groups": [
+        [
+          {
+            "kind": "favorite",
+            "mediaType": "anime",
+            "pluginId": "p",
+            "mediaId": "m",
+            "version": {
+              "counter": 3,
+              "deviceId": "B"
+            },
+            "updatedAt": "2026-01-01",
+            "isDeleted": false,
+            "key": "[\"anime\",\"p\",\"m\"]"
+          }
+        ],
+        [
+          {
+            "kind": "favorite",
+            "mediaType": "anime",
+            "pluginId": "p",
+            "mediaId": "m",
+            "version": {
+              "counter": 3,
+              "deviceId": "a"
+            },
+            "updatedAt": "2026-01-01",
+            "isDeleted": true,
+            "key": "[\"anime\",\"p\",\"m\"]"
+          }
+        ]
+      ],
+      "output": "[{\"kind\":\"favorite\",\"key\":\"[\\\"anime\\\",\\\"p\\\",\\\"m\\\"]\",\"mediaType\":\"anime\",\"pluginId\":\"p\",\"mediaId\":\"m\",\"version\":{\"counter\":3,\"deviceId\":\"a\"},\"updatedAt\":\"2026-01-01\",\"isDeleted\":true}]"
+    },
+    {
+      "name": "invalid record rejected in merge",
+      "groups": [
+        [
+          {
+            "kind": "favorite",
+            "mediaType": "anime",
+            "pluginId": "p",
+            "mediaId": "m",
+            "version": {
+              "counter": 1,
+              "deviceId": "a"
+            },
+            "updatedAt": "2026-01-01",
+            "isDeleted": false,
+            "key": "[\"anime\",\"p\",\"m\"]"
+          }
+        ],
+        [
+          {
+            "kind": "favorite",
+            "mediaType": "anime",
+            "pluginId": "p",
+            "mediaId": "m",
+            "version": {
+              "counter": 1,
+              "deviceId": "a"
+            },
+            "updatedAt": "2026-01-01",
+            "isDeleted": 1,
+            "key": "[\"anime\",\"p\",\"m\"]"
+          }
+        ]
+      ],
+      "output": null
+    },
+    {
+      "name": "empty groups",
+      "groups": [
+        [],
+        []
+      ],
+      "output": "[]"
+    }
+  ]
+}

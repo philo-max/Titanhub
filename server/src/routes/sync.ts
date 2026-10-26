@@ -1,8 +1,15 @@
 import { Hono } from 'hono';
-import { db } from '../db/db';
+import { db, isDesktopDb } from '../db/db';
 import { tracking, favorites } from '../db/schema';
 import { eq, and, inArray, sql } from 'drizzle-orm';
 import { requireAuth } from '../auth/jwt';
+import {
+  getSqliteStorage,
+  sqliteGetTracking,
+  sqliteMergeTracking,
+  sqliteGetFavorites,
+  sqliteMergeFavorites,
+} from '../db/sqlite';
 
 type Env = {
   Variables: {
@@ -15,10 +22,14 @@ const sync = new Hono<Env>();
 // Apply Auth Middleware to all sync routes
 sync.use('*', requireAuth);
 
-// GET: Pull remote tracking logs
+// GET: Pull tracking logs
 sync.get('/tracking', async (c) => {
   const userId = c.get('userId');
   try {
+    if (isDesktopDb()) {
+      const storage = await getSqliteStorage();
+      return c.json({ success: true, tracking: sqliteGetTracking(storage, userId) });
+    }
     const list = await db.select().from(tracking).where(eq(tracking.userId, userId));
     return c.json({ success: true, tracking: list });
   } catch (err: any) {
@@ -32,6 +43,14 @@ sync.post('/tracking', async (c) => {
   try {
     const body = await c.req.json();
     const incomingLogs = body.tracking || [];
+
+    // Desktop / local-first mode: persist into local SQLite instead of PostgreSQL
+    if (isDesktopDb()) {
+      const storage = await getSqliteStorage();
+      const merged = sqliteMergeTracking(storage, userId, incomingLogs);
+      return c.json({ success: true, tracking: merged });
+    }
+
     const validLogs = incomingLogs.filter(
       (item: any) => item.mediaId && item.pluginId && item.mediaType
     );
@@ -77,6 +96,10 @@ sync.post('/tracking', async (c) => {
 sync.get('/favorites', async (c) => {
   const userId = c.get('userId');
   try {
+    if (isDesktopDb()) {
+      const storage = await getSqliteStorage();
+      return c.json({ success: true, favorites: sqliteGetFavorites(storage, userId) });
+    }
     const list = await db.select().from(favorites).where(eq(favorites.userId, userId));
     return c.json({ success: true, favorites: list });
   } catch (err: any) {
@@ -90,6 +113,13 @@ sync.post('/favorites', async (c) => {
   try {
     const body = await c.req.json();
     const incomingFavs = body.favorites || [];
+
+    // Desktop / local-first mode: persist into local SQLite instead of PostgreSQL
+    if (isDesktopDb()) {
+      const storage = await getSqliteStorage();
+      const merged = sqliteMergeFavorites(storage, userId, incomingFavs);
+      return c.json({ success: true, favorites: merged });
+    }
 
     const toDelete: string[] = [];
     const toInsert: any[] = [];

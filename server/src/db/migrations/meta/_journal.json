@@ -15,6 +15,13 @@
       "when": 1783602863717,
       "tag": "0001_colossal_mariko_yashida",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789084800000,
+      "tag": "0002_local_data_layer",
+      "breakpoints": true
     }
   ]
 }

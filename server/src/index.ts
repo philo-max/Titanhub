@@ -2,31 +2,88 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { serve } from '@hono/node-server';
 import fs from 'fs/promises';
+import fsSync from 'fs';
 import path from 'path';
 
-import { adaptKazumi, adaptLNReader } from '@titanhub/plugin-adapter';
+import { adaptKazumi, adaptLNReader, upgradeLegacyLNReaderCode } from '@titanhub/plugin-adapter';
 
-import { getPlugins, savePlugin, deletePlugin, getPlugin, setPluginActive } from './db/db';
+import { getPlugins, getPlugin, savePlugin, deletePlugin, setPluginActive } from './db/db';
 import { PluginManager } from './plugins/manager';
 import { requireAuth } from './auth/jwt';
+import {
+  initLocalSession,
+  isDesktopAuthMode,
+  setLocalSessionAddress,
+  createLocalChallengeResponse,
+} from './auth/local-session';
 import auth from './routes/auth';
 import sync from './routes/sync';
+import history from './routes/history';
 import danmakuRoutes from './routes/danmaku';
 import danmakuEnhanced from './routes/danmaku-enhanced';
 import aggregate from './routes/aggregate';
 import market from './routes/market';
 import visual from './routes/visual';
 import { PlaywrightSniffer } from './plugins/sniffer';
-import { M3u8AdFilter, M3u8Parser } from './plugins/m3u8';
+import { M3u8AdFilter } from './plugins/m3u8';
+import { createWebDavMessageHandler } from './sync/ipc';
+
+initLocalSession(process.env);
+
+if (isDesktopAuthMode() && process.send) {
+  const handleWebDavMessage = createWebDavMessageHandler(response => {
+    if (process.connected) process.send?.(response as Record<string, unknown>);
+  });
+  process.on('message', message => { void handleWebDavMessage(message); });
+}
 
 const app = new Hono();
 
-// Enable CORS for all domains
-app.use('*', cors());
+// Enable CORS restricted to allowed origin in desktop/production, or all in open dev
+const allowedOrigin = process.env.ALLOWED_ORIGIN;
+app.use(
+  '*',
+  cors({
+    origin: (origin) => {
+      if (!origin) return '*';
+      if (allowedOrigin) {
+        if (origin === allowedOrigin) return origin;
+        return null;
+      }
+      return origin;
+    },
+    allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  })
+);
+
+// Health check endpoint for desktop shell and orchestrators
+app.get('/api/health', async (c) => {
+  await pluginsReady;
+  return c.json({ status: 'ok', timestamp: Date.now() });
+});
+
+app.get('/api/local-session/challenge', (c) => {
+  if (!isDesktopAuthMode()) {
+    return c.json({ error: 'Not found' }, 404);
+  }
+  const response = createLocalChallengeResponse(c.req.query('nonce') || '');
+  if (!response) {
+    return c.json({ error: 'Invalid challenge.' }, 400);
+  }
+  return c.json(response);
+});
+
+// Sniffer engine capability and availability probe
+app.get('/api/sniffer/check', async (c) => {
+  const sniffer = await PlaywrightSniffer.checkEngine();
+  return c.json({ status: 'ok', sniffer });
+});
 
 // Mount authentication, sync, danmaku & market routes
 app.route('/api/auth', auth);
 app.route('/api/sync', sync);
+app.route('/api/history', history);
 app.route('/api/danmaku', danmakuRoutes);
 app.route('/api/danmaku', danmakuEnhanced);
 app.route('/api/aggregate', aggregate);
@@ -162,9 +219,28 @@ async function seedMockPlugin() {
     { id: 'tver', name: 'TVer (官方生肉)', types: ['anime'] as const, file: 'tver.js' },
   ];
 
+  function getPluginsDir(): string {
+    if (process.env.TITANHUB_PLUGINS_DIR && fsSync.existsSync(process.env.TITANHUB_PLUGINS_DIR)) {
+      return process.env.TITANHUB_PLUGINS_DIR;
+    }
+    const relativeToDist = path.join(__dirname, 'plugins');
+    if (fsSync.existsSync(relativeToDist)) {
+      return relativeToDist;
+    }
+    const relativeToCwd = path.join(process.cwd(), 'src', 'plugins');
+    if (fsSync.existsSync(relativeToCwd)) {
+      return relativeToCwd;
+    }
+    return path.join(process.cwd(), 'plugins');
+  }
+
+  const pluginsDir = getPluginsDir();
+
   try {
     for (const seed of seeds) {
-      const code = await fs.readFile(path.join(process.cwd(), 'src/plugins', seed.file), 'utf-8');
+      const pluginPath = path.join(pluginsDir, seed.file);
+      if (!fsSync.existsSync(pluginPath)) continue;
+      const code = await fs.readFile(pluginPath, 'utf-8');
       await savePlugin({
         id: seed.id,
         name: seed.name,
@@ -181,31 +257,47 @@ async function seedMockPlugin() {
   }
 
   // Seed real anime sources ported from the Kazumi rule repository (references/Kazumi)
-  const rulesDir = path.join(process.cwd(), 'src/plugins/rules');
+  const rulesDir = path.join(pluginsDir, 'rules');
   try {
-    const ruleFiles = (await fs.readdir(rulesDir)).filter((f) => f.endsWith('.json'));
-    for (const file of ruleFiles) {
-      try {
-        const rule = JSON.parse(await fs.readFile(path.join(rulesDir, file), 'utf-8'));
-        const adapted = adaptKazumi(rule);
-        await savePlugin({
-          ...adapted,
-          isActive: true,
-          isBuiltin: true,
-        });
-        console.log(`Seeded Kazumi rule plugin ${adapted.name} (${adapted.id}).`);
-      } catch (err) {
-        console.error(`Failed to seed Kazumi rule ${file}:`, err);
+    if (fsSync.existsSync(rulesDir)) {
+      const ruleFiles = (await fs.readdir(rulesDir)).filter((f) => f.endsWith('.json'));
+      for (const file of ruleFiles) {
+        try {
+          const rule = JSON.parse(await fs.readFile(path.join(rulesDir, file), 'utf-8'));
+          const adapted = adaptKazumi(rule);
+          const existing = await getPlugin(adapted.id);
+          if (existing && !existing.isBuiltin) continue;
+          await savePlugin({
+            ...adapted,
+            isActive: true,
+            isBuiltin: true,
+          });
+          console.log(`Seeded Kazumi rule plugin ${adapted.name} (${adapted.id}).`);
+        } catch (err) {
+          console.error(`Failed to seed Kazumi rule ${file}:`, err);
+        }
       }
     }
   } catch (err) {
     console.error('Failed to read Kazumi rules directory:', err);
   }
+
+  try {
+    for (const plugin of await getPlugins()) {
+      const upgraded = upgradeLegacyLNReaderCode(plugin.code, { id: plugin.id, name: plugin.name, version: plugin.version });
+      if (upgraded === null) continue;
+      await savePlugin({ ...plugin, code: upgraded });
+      console.log(`Upgraded legacy LNReader plugin ${plugin.name} (${plugin.id}).`);
+    }
+  } catch (err) {
+    console.error('Failed to upgrade legacy LNReader plugins:', err);
+  }
 }
-seedMockPlugin();
+const pluginsReady = seedMockPlugin();
 
 // Health check endpoint - trigger seeding reload version 2
-app.get('/health', (c) => {
+app.get('/health', async (c) => {
+  await pluginsReady;
   return c.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
@@ -268,7 +360,7 @@ app.post('/api/plugins/lnreader', requireAuth, async (c) => {
       isActive: body.isActive !== undefined ? body.isActive : true,
     });
 
-    const { code, ...rest } = saved;
+    const { code: _code, ...rest } = saved;
     return c.json({ success: true, plugin: rest });
   } catch (e: any) {
     return c.json({ error: e.message || String(e) }, 500);
@@ -287,7 +379,7 @@ app.patch('/api/plugins/:id', requireAuth, async (c) => {
     if (!updated) {
       return c.json({ error: `Plugin with id '${id}' not found.` }, 404);
     }
-    const { code, ...rest } = updated;
+    const { code: _code, ...rest } = updated;
     return c.json({ success: true, plugin: rest });
   } catch (e: any) {
     return c.json({ error: e.message || String(e) }, 500);
@@ -421,22 +513,35 @@ app.get('/api/m3u8/filter', async (c) => {
     c.header('Content-Type', 'application/vnd.apple.mpegurl');
     return c.body(filtered);
   } catch (err: any) {
-    return c.json({ error: err.message || String(err) }, 500);
+    const message = err.message || String(err);
+    if (message.includes('SecurityError') || message.includes('Invalid URL')) {
+      return c.json({ error: message }, 400);
+    }
+    if (message.includes('aborted') || message.includes('timeout')) {
+      return c.json({ error: 'Upstream M3U8 request timed out.' }, 504);
+    }
+    return c.json({ error: message }, 502);
   }
 });
 
 // GET: Fetch mock Danmaku list for the video player
 // Start server
 const port = process.env.PORT ? parseInt(process.env.PORT) : 3001;
+const host = process.env.HOST || '127.0.0.1';
 
 if (typeof Bun === 'undefined' && process.env.NODE_ENV !== 'test') {
-  serve({
-    fetch: app.fetch,
-    port,
-  });
-  console.log(`Server is running on Node.js at http://localhost:${port}...`);
+  serve(
+    {
+      fetch: app.fetch,
+      port,
+      hostname: host,
+    },
+    (info) => setLocalSessionAddress(host, info.port)
+  );
+  console.log(`Server is running on Node.js at http://${host}:${port}...`);
 } else {
-  console.log(`Server is running on Bun at http://localhost:${port}...`);
+  setLocalSessionAddress(host, port);
+  console.log(`Server is running on Bun at http://${host}:${port}...`);
 }
 
 // Close the shared headless browser on shutdown so restarts (e.g. tsx watch)

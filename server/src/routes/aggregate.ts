@@ -1,5 +1,7 @@
 import { Hono } from 'hono';
-import { getPlugins, db } from '../db/db';
+import { getPlugins, db, isDesktopDb, type DBPlugin } from '../db/db';
+import { getSqliteStorage } from '../db/sqlite';
+import { sqliteGetMediaRanking, sqliteRecordMediaView } from '../db/sqlite/media-views';
 import { mediaViews } from '../db/schema';
 import { desc, eq, sql } from 'drizzle-orm';
 import { PluginManager } from '../plugins/manager';
@@ -50,17 +52,57 @@ function groupMediaItems(perPluginItems: AggregatedMediaItem[][]): HubMediaGroup
 
 const MEDIA_TYPES: MediaType[] = ['anime', 'manga', 'novel', 'movie'];
 const PLUGIN_TIMEOUT_MS = 8000;
+const BUILTIN_DEMO_IDS = new Set(['dmzj-mock', 'movie-mock', 'ssrfun', 'cyfz', 'tver']);
 
-function withTimeout<T>(promise: Promise<T>, pluginId: string): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) =>
-      setTimeout(
-        () => reject(new Error(`Plugin '${pluginId}' timed out after ${PLUGIN_TIMEOUT_MS}ms`)),
-        PLUGIN_TIMEOUT_MS
-      )
-    ),
-  ]);
+function isLiveSource(plugin: DBPlugin): boolean {
+  return plugin.isActive && !(plugin.isBuiltin && BUILTIN_DEMO_IDS.has(plugin.id));
+}
+
+async function withTimeout<T>(promise: Promise<T>, pluginId: string): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) =>
+        timeout = setTimeout(
+          () => reject(new Error(`Plugin '${pluginId}' timed out after ${PLUGIN_TIMEOUT_MS}ms`)),
+          PLUGIN_TIMEOUT_MS
+        )
+      ),
+    ]);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function failureMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  if (/filename|wasm|QuickJS|runtime initialization/i.test(message)) return '来源引擎初始化失败，请升级客户端。';
+  if (/SecurityError|sandbox policy|Public DNS|Fake-IP/i.test(message)) return '来源地址未通过网络校验，请检查代理或 DNS 设置，或更换来源。';
+  if (/timed out|timeout/i.test(message)) return '来源请求超时，请稍后重试。';
+  if (/fetch|network|ECONN|ENOTFOUND/i.test(message)) return '来源网络请求失败，请检查网络或更换来源。';
+  return '来源返回错误或无法解析，请在来源管理中检查。';
+}
+
+async function exploreSources(plugins: DBPlugin[], type: MediaType) {
+  return Promise.all(plugins.map(async (plugin) => {
+    const source = { id: plugin.id, name: plugin.name };
+    try {
+      const result = await withTimeout(PluginManager.explore(plugin.id, type), plugin.id);
+      if (!result.success) throw new Error(result.error || 'Source request failed');
+      if (!Array.isArray(result.data) || !result.data.every(item => item && typeof item.id === 'string' && item.id.length > 0 && typeof item.title === 'string' && item.title.trim().length > 0)) {
+        throw new Error('Invalid source media data');
+      }
+      const providesVideo = !/providesVideo\s*:\s*false/.test(plugin.code);
+      const items: AggregatedMediaItem[] = result.data.map(item => ({ ...item, cover: typeof item.cover === 'string' ? item.cover : '', pluginId: plugin.id, pluginName: plugin.name, mediaType: type, providesVideo }));
+      return { items, source: { ...source, status: items.length ? 'success' : 'empty', itemCount: items.length } };
+    } catch (error) {
+      const message = failureMessage(error);
+      const timedOut = error instanceof Error && /timed out|timeout/i.test(error.message);
+      console.warn(`[aggregate/home] ${plugin.id}: ${message}`);
+      return { items: [] as AggregatedMediaItem[], source: { ...source, status: timedOut ? 'timeout' : 'error', itemCount: 0, message } };
+    }
+  }));
 }
 
 // GET: Aggregated home feed for one media type, queried across all active plugins
@@ -78,29 +120,10 @@ aggregate.get('/home', async (c) => {
 
   try {
     const all = await getPlugins();
-    const eligible = all.filter((p) => p.isActive && p.types.includes(type));
+    const eligible = all.filter((p) => isLiveSource(p) && p.types.includes(type));
 
-    const perPlugin = await Promise.all(
-      eligible.map(async (plugin) => {
-        try {
-          const result = await withTimeout(PluginManager.explore(plugin.id, type), plugin.id);
-          if (!result.success || !Array.isArray(result.data)) return [];
-          const providesVideo = !/providesVideo\s*:\s*false/.test(plugin.code);
-          return result.data.map((item): AggregatedMediaItem => ({
-            ...item,
-            pluginId: plugin.id,
-            pluginName: plugin.name,
-            mediaType: type,
-            providesVideo,
-          }));
-        } catch (err: any) {
-          console.warn(`[aggregate/home] Plugin '${plugin.id}' explore failed: ${err.message || err}`);
-          return [];
-        }
-      })
-    );
-
-    const allItems = groupMediaItems(perPlugin);
+    const perPlugin = await exploreSources(eligible, type);
+    const allItems = groupMediaItems(perPlugin.map(result => result.items));
     const total = allItems.length;
     const start = (page - 1) * pageSize;
     const items = allItems.slice(start, start + pageSize);
@@ -111,7 +134,11 @@ aggregate.get('/home', async (c) => {
       page,
       pageSize,
       hasMore: start + pageSize < total,
-      sources: eligible.map((p) => ({ id: p.id, name: p.name })),
+      sources: perPlugin.map(result => result.source),
+      ...(total === 0 ? {
+        emptyReason: !eligible.length ? 'no_sources' : perPlugin.every(result => ['error', 'timeout'].includes(result.source.status)) ? 'sources_failed' : 'empty',
+        error: !eligible.length ? '当前分类没有已启用的来源，请先到来源管理启用来源。' : perPlugin.every(result => ['error', 'timeout'].includes(result.source.status)) ? '所有已启用来源均加载失败，请查看来源状态。' : '当前来源暂未返回内容，可重试或更换来源。',
+      } : {}),
     });
   } catch (err: any) {
     return c.json({ error: err.message || String(err) }, 500);
@@ -134,7 +161,7 @@ aggregate.get('/search', async (c) => {
 
   try {
     const all = await getPlugins();
-    const eligible = all.filter((p) => p.isActive && (!type || p.types.includes(type)));
+    const eligible = all.filter((p) => isLiveSource(p) && (!type || p.types.includes(type)));
 
     const perPlugin = await Promise.all(
       eligible.map(async (plugin) => {
@@ -173,25 +200,29 @@ aggregate.post('/view', async (c) => {
     const body = await c.req.json();
     const { mediaType, mediaId, pluginId, title, cover } = body;
 
-    if (!MEDIA_TYPES.includes(mediaType) || !mediaId || !pluginId || !title) {
+    if (!MEDIA_TYPES.includes(mediaType) || typeof mediaId !== 'string' || !mediaId || typeof pluginId !== 'string' || !pluginId || typeof title !== 'string' || !title || (cover !== undefined && typeof cover !== 'string')) {
       return c.json(
         { error: 'Required fields: mediaType, mediaId, pluginId, title.' },
         400
       );
     }
 
-    await db
-      .insert(mediaViews)
-      .values({ mediaType, mediaId, pluginId, title, cover, views: 1 })
-      .onConflictDoUpdate({
-        target: [mediaViews.pluginId, mediaViews.mediaId, mediaViews.mediaType],
-        set: {
-          views: sql`${mediaViews.views} + 1`,
-          title,
-          cover,
-          updatedAt: new Date(),
-        },
-      });
+    if (isDesktopDb()) {
+      sqliteRecordMediaView(await getSqliteStorage(), { mediaType, mediaId, pluginId, title, cover });
+    } else {
+      await db
+        .insert(mediaViews)
+        .values({ mediaType, mediaId, pluginId, title, cover, views: 1 })
+        .onConflictDoUpdate({
+          target: [mediaViews.pluginId, mediaViews.mediaId, mediaViews.mediaType],
+          set: {
+            views: sql`${mediaViews.views} + 1`,
+            title,
+            cover,
+            updatedAt: new Date(),
+          },
+        });
+    }
 
     return c.json({ success: true });
   } catch (err: any) {
@@ -208,10 +239,12 @@ aggregate.get('/ranking', async (c) => {
       400
     );
   }
-  const limit = Math.min(Number(c.req.query('limit')) || 10, 50);
+  const limit = Math.max(1, Math.min(Math.floor(Number(c.req.query('limit')) || 10), 50));
 
   try {
-    const rows = await db
+    const rows = isDesktopDb()
+      ? sqliteGetMediaRanking(await getSqliteStorage(), type, limit)
+      : await db
       .select()
       .from(mediaViews)
       .where(type ? eq(mediaViews.mediaType, type) : undefined)
@@ -222,25 +255,11 @@ aggregate.get('/ranking', async (c) => {
     // so the sidebar shows real content instead of fake mock data.
     if (rows.length === 0 && type) {
       const all = await getPlugins();
-      const eligible = all.filter((p) => p.isActive && p.types.includes(type));
-      const perPlugin = await Promise.all(
-        eligible.map(async (plugin) => {
-          try {
-            const result = await withTimeout(PluginManager.explore(plugin.id, type), plugin.id);
-            if (!result.success || !Array.isArray(result.data)) return [];
-            return result.data.slice(0, 3).map((item) => ({
-              mediaId: item.id,
-              title: item.title,
-              pluginId: plugin.id,
-              mediaType: type,
-              views: 0,
-            }));
-          } catch {
-            return [];
-          }
-        })
-      );
-      const fallback = perPlugin.flat().slice(0, limit);
+      const eligible = all.filter((p) => isLiveSource(p) && p.types.includes(type));
+      const perPlugin = await exploreSources(eligible, type);
+      const fallback = perPlugin.flatMap(result => result.items.slice(0, 3).map(item => ({
+        mediaId: item.id, title: item.title, pluginId: item.pluginId, mediaType: type, views: 0,
+      }))).slice(0, limit);
       return c.json({ items: fallback });
     }
 

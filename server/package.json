@@ -7,14 +7,15 @@
     "start": "tsx src/index.ts",
     "dev:bun": "bun --watch src/index.ts",
     "start:bun": "bun src/index.ts",
-    "build": "tsc",
-    "test": "vitest run",
+    "build": "tsc --noEmit && node scripts/build.mjs",
+    "test": "vitest run src",
     "lint": "eslint ."
   },
   "dependencies": {
     "@hono/node-server": "^1.13.7",
     "@titanhub/plugin-adapter": "workspace:*",
     "@titanhub/plugin-types": "workspace:*",
+    "@types/sql.js": "^1.4.11",
     "@xmldom/xmldom": "^0.9.10",
     "bcryptjs": "^3.0.3",
     "cheerio": "^1.2.0",
@@ -25,6 +26,7 @@
     "playwright-extra": "^4.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
     "quickjs-emscripten": "^0.32.0",
+    "sql.js": "^1.14.2",
     "undici": "^8.7.0",
     "xpath": "^0.0.34"
   },
@@ -34,6 +36,7 @@
     "@types/pg": "^8.20.0",
     "bun-types": "latest",
     "drizzle-kit": "^0.31.10",
+    "esbuild": "^0.25.0",
     "tsx": "^4.19.3",
     "typescript": "^5.0.0",
     "vitest": "^4.1.10"

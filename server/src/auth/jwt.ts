@@ -1,14 +1,24 @@
 import { sign, verify } from 'hono/jwt';
 import { createMiddleware } from 'hono/factory';
+import { isDesktopAuthMode, verifyLocalToken, LOCAL_USER_ID } from './local-session';
 
-const SECRET = process.env.TOKEN_SECRET || 'titanhub-dev-secret-change-me';
-const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30;
+const DEFAULT_SECRETS = ['titanhub-dev-secret-change-me', 'super-secret-jwt-key'];
+const rawSecret = process.env.JWT_SECRET || process.env.TOKEN_SECRET;
 
-if (!process.env.TOKEN_SECRET) {
+if (process.env.NODE_ENV === 'production' && process.env.TITANHUB_DESKTOP !== '1') {
+  if (!rawSecret || DEFAULT_SECRETS.includes(rawSecret)) {
+    throw new Error(
+      '[auth] Fatal: Insecure or missing JWT_SECRET / TOKEN_SECRET in production! Please set a strong random secret.'
+    );
+  }
+} else if (!rawSecret || DEFAULT_SECRETS.includes(rawSecret)) {
   console.warn(
-    '[auth] TOKEN_SECRET is not set. Using an insecure development default; set TOKEN_SECRET in production.'
+    '[auth] JWT_SECRET / TOKEN_SECRET is not set or using insecure default. Set JWT_SECRET in production.'
   );
 }
+
+const SECRET = rawSecret || 'titanhub-dev-secret-change-me';
+const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30;
 
 export async function signUserToken(userId: string): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
@@ -30,6 +40,15 @@ export const requireAuth = createMiddleware<AuthEnv>(async (c, next) => {
   const authHeader = c.req.header('Authorization');
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return c.json({ error: 'Unauthorized. Bearer token required.' }, 401);
+  }
+
+  if (isDesktopAuthMode()) {
+    if (!verifyLocalToken(authHeader.slice('Bearer '.length))) {
+      return c.json({ error: 'Unauthorized. Invalid local session.' }, 401);
+    }
+    c.set('userId', LOCAL_USER_ID);
+    await next();
+    return;
   }
 
   const userId = await verifyUserToken(authHeader.slice('Bearer '.length));

@@ -7,6 +7,7 @@ describe('PlaywrightSniffer E2E', () => {
   let serverUrl: string;
 
   beforeAll(() => {
+    PlaywrightSniffer.resolveAddress = async (hostname) => (hostname === '127.0.0.1' ? '127.0.0.1' : null);
     // Start local server to serve mock HTML page
     server = http.createServer((req, res) => {
       if (req.url === '/') {

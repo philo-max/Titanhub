@@ -5,7 +5,8 @@ import Link from 'next/link';
 import SmartImage from '@/components/SmartImage';
 import { ArrowLeft, Heart, History, Loader2, PlayCircle } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
-import { useSyncStore, TrackingLog } from '@/stores/syncStore';
+import { useSyncStore, TrackingLog, mediaKey } from '@/stores/syncStore';
+import { useLocalSessionStore } from '@/stores/localSessionStore';
 import { API_BASE } from '@/lib/config';
 
 interface DetailInfo {
@@ -36,22 +37,26 @@ function resumeHref(log: TrackingLog): string {
 
 export default function TrackingPage() {
   const user = useAuthStore((s) => s.user);
+  const localStatus = useLocalSessionStore((s) => s.status);
+  const sessionError = useLocalSessionStore((s) => s.error);
+  const syncError = useSyncStore((s) => s.error);
   const { trackingList, favoritesList, pullTracking, pullFavorites } = useSyncStore();
   const [details, setDetails] = useState<Record<string, DetailInfo>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) {
+    if (!user && localStatus !== 'ready') {
       setLoading(false);
       return;
     }
-    Promise.all([pullTracking(), pullFavorites()]).finally(() => setLoading(false));
-  }, [user, pullTracking, pullFavorites]);
+    setLoading(true);
+    Promise.all([pullTracking(), pullFavorites()]).catch(() => undefined).finally(() => setLoading(false));
+  }, [user, localStatus, pullTracking, pullFavorites]);
 
   useEffect(() => {
     const pairs = new Map<string, { pluginId: string; mediaId: string }>();
     for (const entry of [...trackingList, ...favoritesList]) {
-      pairs.set(`${entry.pluginId}|${entry.mediaId}`, entry);
+      pairs.set(mediaKey(entry), entry);
     }
 
     pairs.forEach(({ pluginId, mediaId }, key) => {
@@ -72,7 +77,7 @@ export default function TrackingPage() {
     });
   }, [trackingList, favoritesList]);
 
-  if (!user) {
+  if (!user && localStatus === 'idle') {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6 text-textPrimary">
         <div className="max-w-md p-8 rounded-2xl border border-border bg-surface text-center">
@@ -108,10 +113,18 @@ export default function TrackingPage() {
           我的追踪
         </h1>
 
-        {loading ? (
+        {syncError || sessionError ? (
+          <div role="alert" className="mb-6 text-sm text-rose-400">
+            {syncError || sessionError}
+            <button className="ml-3 text-primary" onClick={() => {
+              setLoading(true);
+              Promise.all([pullTracking(), pullFavorites()]).catch(() => undefined).finally(() => setLoading(false));
+            }}>重试</button>
+          </div>
+        ) : loading || localStatus === 'loading' ? (
           <div className="flex items-center justify-center py-24 text-textSecondary">
             <Loader2 className="h-6 w-6 animate-spin mr-2" />
-            <span className="text-sm">正在同步云端进度...</span>
+            <span className="text-sm">{localStatus === 'ready' ? '正在读取本地资料...' : '正在同步云端进度...'}</span>
           </div>
         ) : trackingList.length === 0 ? (
           <div className="text-center py-16 text-textSecondary text-sm border border-border rounded-2xl bg-surface/40">
@@ -120,10 +133,10 @@ export default function TrackingPage() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-16">
             {trackingList.map((log) => {
-              const info = details[`${log.pluginId}|${log.mediaId}`];
+              const info = details[mediaKey(log)];
               return (
                 <Link
-                  key={`${log.pluginId}-${log.mediaId}`}
+                  key={mediaKey(log)}
                   href={resumeHref(log)}
                   className="group flex items-center gap-4 p-4 rounded-2xl bg-surface border border-border hover:border-primary/40 hover:bg-surfaceLight transition"
                 >
@@ -159,17 +172,17 @@ export default function TrackingPage() {
           <Heart className="h-5 w-5 text-rose-400 mr-2" />
           我的收藏 ({favoritesList.length})
         </h2>
-        {favoritesList.length === 0 ? (
+        {syncError || loading || localStatus === 'loading' || localStatus === 'error' ? null : favoritesList.length === 0 ? (
           <div className="text-center py-10 text-textSecondary text-sm border border-border rounded-2xl bg-surface/40">
             暂无收藏内容。
           </div>
         ) : (
           <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-4">
             {favoritesList.map((fav) => {
-              const info = details[`${fav.pluginId}|${fav.mediaId}`];
+              const info = details[mediaKey(fav)];
               return (
                 <Link
-                  key={`${fav.pluginId}-${fav.mediaId}`}
+                  key={mediaKey(fav)}
                   href={`/${fav.mediaType}/${fav.pluginId}/${fav.mediaId}`}
                   className="group"
                 >

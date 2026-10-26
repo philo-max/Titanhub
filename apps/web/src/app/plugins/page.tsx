@@ -18,7 +18,10 @@ import {
 } from 'lucide-react';
 import { adaptKazumi, adaptVenera } from '@titanhub/plugin-adapter';
 import { useAuthStore } from '@/stores/authStore';
+import { useLocalSessionStore } from '@/stores/localSessionStore';
 import { API_BASE } from '@/lib/config';
+import { fetchPluginMutation } from '@/lib/plugin-request';
+import { installMarketSources } from '@/lib/source-market';
 
 interface PluginInfo {
   id: string;
@@ -35,14 +38,27 @@ interface MarketPlugin {
   name: string;
   version: string;
   type: 'anime' | 'manga' | 'novel' | 'movie';
-  sourceType: 'kazumi' | 'lnreader' | 'venera';
+  sourceType: 'kazumi' | 'lnreader' | 'venera' | 'mangayomi';
   downloadUrl: string;
   description?: string;
   lang?: string;
+  runtime?: 'javascript' | 'dart';
+  installable?: boolean;
+  compatibility?: 'compatible' | 'experimental' | 'unsupported';
+  limitation?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export default function PluginMarketPage() {
   const token = useAuthStore((s) => s.token);
+  const localStatus = useLocalSessionStore((s) => s.status);
+  const canManage = localStatus === 'ready' || (localStatus === 'idle' && Boolean(token));
+  const lockedMessage =
+    localStatus === 'idle'
+      ? '安装插件需要先登录，请在右上角菜单进行登录。'
+      : localStatus === 'loading'
+        ? '本地会话初始化中，请稍候。'
+        : '本地会话不可用，请重启应用后重试。';
   const [plugins, setPlugins] = useState<PluginInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState('');
@@ -62,11 +78,9 @@ export default function PluginMarketPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedType, setSelectedType] = useState<string>('all');
   const [activeTab, setActiveTab] = useState<'market' | 'installed' | 'custom'>('market');
-
-  const authHeaders = useCallback(
-    (): Record<string, string> => (token ? { Authorization: `Bearer ${token}` } : {}),
-    [token]
-  );
+  const [includeUnsupported, setIncludeUnsupported] = useState(false);
+  const [providerNotice, setProviderNotice] = useState('');
+  const [batchProgress, setBatchProgress] = useState({ completed: 0, total: 0 });
 
   const refresh = useCallback(async () => {
     try {
@@ -80,15 +94,19 @@ export default function PluginMarketPage() {
     }
   }, []);
 
-  const fetchMarket = useCallback(async () => {
+  const fetchMarket = useCallback(async (force = false) => {
     setMarketLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/market/sources`);
+      const res = await fetch(`${API_BASE}/api/market/sources${force ? '?refresh=1' : ''}`);
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || '来源目录请求失败。');
       setMarketSources(data.sources || []);
+      const fallback = (data.providers || []).filter((provider: { status: string }) => provider.status === 'bundled');
+      setProviderNotice(fallback.length ? `${fallback.length} 个远程目录暂不可用，已显示随客户端提供的目录；可刷新重试更新。` : '');
     } catch {
       // Graceful fallback if market api fails
       console.error('Failed to fetch marketplace plugins.');
+      setProviderNotice('无法更新来源目录，请检查网络后重试。');
     } finally {
       setMarketLoading(false);
     }
@@ -102,9 +120,9 @@ export default function PluginMarketPage() {
   const toggleActive = async (plugin: PluginInfo) => {
     setBusy(plugin.id);
     try {
-      const res = await fetch(`${API_BASE}/api/plugins/${plugin.id}`, {
+      const res = await fetchPluginMutation(`/api/plugins/${plugin.id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isActive: !plugin.isActive }),
       });
       const data = await res.json();
@@ -121,9 +139,8 @@ export default function PluginMarketPage() {
     if (!window.confirm(`确定卸载插件「${plugin.name}」？`)) return;
     setBusy(plugin.id);
     try {
-      const res = await fetch(`${API_BASE}/api/plugins/${plugin.id}`, {
+      const res = await fetchPluginMutation(`/api/plugins/${plugin.id}`, {
         method: 'DELETE',
-        headers: authHeaders(),
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
@@ -171,9 +188,9 @@ export default function PluginMarketPage() {
         };
       }
 
-      const res = await fetch(`${API_BASE}/api/plugins`, {
+      const res = await fetchPluginMutation('/api/plugins', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
       const data = await res.json();
@@ -193,22 +210,22 @@ export default function PluginMarketPage() {
 
   // Market One-Click Install
   const installFromMarket = async (src: MarketPlugin) => {
-    if (!token) {
-      setMessage('安装插件需要先登录，请在右上角菜单进行登录。');
+    if (!canManage) {
+      setMessage(lockedMessage);
       return;
     }
     setInstallingId(src.id);
     setMessage('');
     try {
-      const res = await fetch(`${API_BASE}/api/market/install`, {
+      const res = await fetchPluginMutation('/api/market/install', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(src),
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
 
-      setMessage(`🎉 插件「${src.name.replace(/\s*\(\w+\)$/i, '')}」一键安装并适配成功！`);
+      setMessage(`已安装「${src.name}」，可在已安装中管理。`);
       await refresh();
     } catch (err: any) {
       setMessage(err.message || '安装失败，请检查后端网络与日志。');
@@ -231,8 +248,27 @@ export default function PluginMarketPage() {
       (selectedType === 'manga' && src.type === 'manga') ||
       (selectedType === 'novel' && src.type === 'novel');
 
-    return matchesSearch && matchesType;
+    return matchesSearch && matchesType && (includeUnsupported || src.installable !== false);
   });
+
+  const installFiltered = async () => {
+    if (!canManage || installingId) return;
+    setInstallingId('batch');
+    setMessage('');
+    try {
+      const result = await installMarketSources(filteredMarket, plugins, async source => {
+        const response = await fetchPluginMutation('/api/market/install', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(source),
+        });
+        const body = await response.json();
+        if (!response.ok || body.error) throw new Error(body.error || `HTTP ${response.status}`);
+      }, (completed, total) => setBatchProgress({ completed, total }));
+      setMessage(`本次安装或更新 ${result.succeeded.length} 个来源，失败 ${result.failed.length} 个。${result.failed.length ? ` ${result.failed.slice(0, 3).map(source => `${source.id}：${source.error}`).join('；')}` : ''}`);
+      await refresh();
+    } finally {
+      setInstallingId('');
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background text-textPrimary pb-24">
@@ -252,13 +288,13 @@ export default function PluginMarketPage() {
               插件中央市场
             </h1>
             <p className="text-sm text-textSecondary mt-1">
-              通过 WebAssembly 沙箱安全执行解析，一键装配海量开源动漫、漫画和轻小说聚合源。
+              从参考应用的完整目录安装或更新来源。实验兼容来源以实际搜索、阅读和播放结果为准。
             </p>
           </div>
           <div className="flex items-center gap-2">
-            {!token && (
+            {!canManage && (
               <span className="text-xs px-3 py-1.5 rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/20">
-                🔒 登录后解锁一键安装与管理
+                {localStatus === 'idle' ? '🔒 登录后解锁一键安装与管理' : lockedMessage}
               </span>
             )}
           </div>
@@ -332,7 +368,7 @@ export default function PluginMarketPage() {
                 </div>
 
                 <button
-                  onClick={fetchMarket}
+                  onClick={() => fetchMarket(true)}
                   disabled={marketLoading}
                   title="刷新市场数据"
                   className="p-2.5 rounded-xl bg-surface/50 border border-border/80 hover:bg-surfaceLight text-textSecondary hover:text-textPrimary transition disabled:opacity-50"
@@ -340,6 +376,18 @@ export default function PluginMarketPage() {
                   <RefreshCw className={`h-4 w-4 ${marketLoading ? 'animate-spin' : ''}`} />
                 </button>
               </div>
+            </div>
+
+            {providerNotice && <p role="status" className="text-sm text-textSecondary">{providerNotice}</p>}
+            <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+              <label className="flex items-center gap-2 text-textSecondary">
+                <input type="checkbox" checked={includeUnsupported} onChange={event => setIncludeUnsupported(event.target.checked)} />
+                显示待适配来源（{marketSources.filter(source => source.installable === false).length}）
+              </label>
+              <button onClick={installFiltered} disabled={!canManage || !!installingId || marketLoading}
+                className="rounded-xl border border-border px-4 py-2 text-primary disabled:opacity-50">
+                {installingId === 'batch' ? `安装中 ${batchProgress.completed}/${batchProgress.total}` : '安装或更新筛选中的可用来源'}
+              </button>
             </div>
 
             {marketLoading ? (
@@ -354,7 +402,8 @@ export default function PluginMarketPage() {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {filteredMarket.map((src) => {
-                  const isInstalled = plugins.some((p) => p.id === src.id);
+                  const installedPlugin = plugins.find((p) => p.id === src.id);
+                  const isInstalled = Boolean(installedPlugin);
                   const isInstalling = installingId === src.id;
 
                   // Determine colored bullet by plugin type
@@ -408,6 +457,7 @@ export default function PluginMarketPage() {
                         <p className="text-xs text-textSecondary mt-1 leading-relaxed line-clamp-2 min-h-[2rem]">
                           {src.description || '暂无描述。'}
                         </p>
+                        {src.limitation && <p className="mt-2 text-xs text-textSecondary">{src.limitation}</p>}
                       </div>
 
                       <div className="flex items-center justify-between border-t border-border/60 pt-4 mt-4 text-xs">
@@ -416,23 +466,23 @@ export default function PluginMarketPage() {
                           <div className="flex gap-2">
                             <span className="flex items-center gap-1 text-emerald-400 font-semibold px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 select-none">
                               <Check className="h-3.5 w-3.5" />
-                              已启用
+                              {installedPlugin?.isActive ? '已启用' : '已停用'}
                             </span>
-                            {token && (
+                            {canManage && (
                               <button
                                 onClick={() => installFromMarket(src)}
-                                disabled={!!installingId}
+                                disabled={!!installingId || src.installable === false}
                                 className="text-textSecondary hover:text-textPrimary font-semibold px-3 py-1.5 rounded-xl bg-surfaceLight border border-border transition hover:bg-surface/80"
                               >
-                                重装
+                                {installedPlugin?.version === src.version ? '重装' : '更新'}
                               </button>
                             )}
                           </div>
                         ) : (
                           <button
                             onClick={() => installFromMarket(src)}
-                            disabled={!token || !!installingId}
-                            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-white font-bold transition-all shadow-md shadow-primary/10 ${token ? 'bg-primary hover:opacity-90 hover:scale-[1.02] active:scale-[0.98]' : 'bg-surfaceLight text-textSecondary border border-border cursor-not-allowed opacity-50'}`}
+                            disabled={!canManage || !!installingId || src.installable === false}
+                            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-white font-bold transition-all shadow-md shadow-primary/10 ${canManage ? 'bg-primary hover:opacity-90 hover:scale-[1.02] active:scale-[0.98]' : 'bg-surfaceLight text-textSecondary border border-border cursor-not-allowed opacity-50'}`}
                           >
                             {isInstalling ? (
                               <>
@@ -442,7 +492,7 @@ export default function PluginMarketPage() {
                             ) : (
                               <>
                                 <DownloadCloud className="h-3.5 w-3.5" />
-                                一键装配
+                                {src.installable === false ? '暂不支持' : '安装来源'}
                               </>
                             )}
                           </button>
@@ -495,7 +545,7 @@ export default function PluginMarketPage() {
                         支持类型: <span className="font-semibold text-textPrimary">{plugin.types.join(', ')}</span>
                       </p>
                     </div>
-                    {token && (
+                    {canManage && (
                       <div className="flex items-center gap-2 flex-shrink-0">
                         <button
                           onClick={() => toggleActive(plugin)}
@@ -547,7 +597,7 @@ export default function PluginMarketPage() {
               ))}
             </div>
 
-            {token ? (
+            {canManage ? (
               <form onSubmit={installCustom} className="space-y-4">
                 {(mode === 'js' || mode === 'venera') && (
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -601,7 +651,7 @@ export default function PluginMarketPage() {
               </form>
             ) : (
               <div className="text-center py-10 bg-background/30 rounded-2xl border border-border text-sm text-textSecondary">
-                🔒 请先在右上角菜单登录以导入和部署自定义插件。
+                {localStatus === 'idle' ? '🔒 请先在右上角菜单登录以导入和部署自定义插件。' : lockedMessage}
               </div>
             )}
           </section>

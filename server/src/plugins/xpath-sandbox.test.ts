@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
+import { getQuickJS } from 'quickjs-emscripten';
 import { PluginSandbox } from './sandbox';
 import { adaptKazumi } from '@titanhub/plugin-adapter';
 import { PlaywrightSniffer } from './sniffer';
@@ -22,6 +23,10 @@ const htmlSource = `
 `;
 
 describe('XPath Sandbox htmlParser', () => {
+  beforeAll(async () => {
+    await getQuickJS();
+  });
+
   it('supports CSS selectors', async () => {
     const code = `
       globalThis.plugin = {
@@ -49,6 +54,20 @@ describe('XPath Sandbox htmlParser', () => {
     expect(result.success).toBe(true);
     expect(result.data).toHaveLength(2);
     expect(result.data![0].text).toBe('第一话 冒险开始');
+    expect(result.data![0].attrs.href).toBe('/anime/101');
+  });
+
+  it('supports relative XPath selectors', async () => {
+    const code = `
+      globalThis.plugin = {
+        async test(html) {
+          return htmlParser.select(html, './/ul[@class="item-list"]/li/a');
+        }
+      };
+    `;
+    const result = await new PluginSandbox(code).runMethod<any[]>('test', [htmlSource]);
+    expect(result.success).toBe(true);
+    expect(result.data).toHaveLength(2);
     expect(result.data![0].attrs.href).toBe('/anime/101');
   });
 
@@ -138,7 +157,11 @@ describe('XPath Sandbox htmlParser', () => {
     `;
 
     try {
-      const result = await new PluginSandbox(code).runMethod<string>('getVideo', ['x'], 100);
+      const result = await new PluginSandbox(code).runMethod<string>(
+        'getVideo',
+        ['http://example.com/play'],
+        100
+      );
       expect(result.success).toBe(true);
       expect(result.data).toBe('http://example.com/late.m3u8');
     } finally {
@@ -161,7 +184,7 @@ describe('XPath Sandbox htmlParser', () => {
 
   it('evaluates adapted Kazumi rules with XPath', async () => {
     const originalFetch = (global as any).fetch;
-    const fetchMock = async (url: string) => {
+    const fetchMock = async (_url: string) => {
       return {
         status: 200,
         text: async () => htmlSource,

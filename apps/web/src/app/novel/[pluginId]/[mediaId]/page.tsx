@@ -1,15 +1,15 @@
 'use client';
 
 import React, { use, useEffect, useState, useRef } from 'react';
-import Link from 'next/link';
 import SmartImage from '@/components/SmartImage';
+import FavoriteButton from '@/components/FavoriteButton';
 import { useRouter } from 'next/navigation';
 import {
   animateDetailPageEntrance,
   animateDetailPageExitBack,
   animateDetailPageExitPlay,
 } from '@/lib/animations';
-import { ArrowLeft, BookOpen, Calendar, User, Compass, HelpCircle, Loader2 } from 'lucide-react';
+import { ArrowLeft, BookOpen, Calendar, User, HelpCircle, Loader2 } from 'lucide-react';
 import { API_BASE, recordMediaView } from '@/lib/config';
 
 interface Params {
@@ -173,6 +173,7 @@ export default function NovelDetailPage({ params }: { params: Promise<Params> })
               <h1 className="animate-fade-in text-3xl font-extrabold text-white tracking-tight mb-4 text-center md:text-left leading-tight">
                 {detail.title}
               </h1>
+              <FavoriteButton mediaType="novel" pluginId={pluginId} mediaId={mediaId} />
 
               {/* Tags grid */}
               <div className="animate-fade-in flex flex-wrap gap-2 justify-center md:justify-start mb-6">

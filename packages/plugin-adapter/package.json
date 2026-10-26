@@ -13,6 +13,10 @@
     "@titanhub/plugin-types": "workspace:*"
   },
   "devDependencies": {
+    "cheerio": "^1.2.0",
+    "dayjs": "^1.11.23",
+    "esbuild": "^0.25.0",
+    "htmlparser2": "^10.1.0",
     "typescript": "^5.0.0",
     "vitest": "^4.1.10"
   }

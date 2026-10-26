@@ -39,10 +39,19 @@ references/
 db.json
 .claude/
 
+# Desktop & Web standalone build outputs
+standalone/
+release/
+dist-release/
+dist-package/
+build-out/
+
 # Temporary test logs and browser profiles
 *.log
 *profile/
 agent-browser.json
 500_error.html
 edge-profile-test/
-
+.desktop-data/
+*.db
+*.db.tmp*

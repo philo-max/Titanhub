@@ -40,8 +40,33 @@ jobs:
       - name: Run Backend Tests
         run: pnpm --filter titanhub-server test
 
+      - name: Run Web Tests
+        run: pnpm --filter titanhub-web test
+
       - name: Run Web Build (Typecheck)
         run: pnpm build
+
+  build-windows-electron:
+    name: Build Windows Electron Installer
+    needs: test-and-lint
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm package:desktop
+      - run: pnpm --filter titanhub-desktop test
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-electron-installer
+          path: apps/desktop/build-out/Titanhub-Setup-*.exe
+          if-no-files-found: error
 
   build-android:
     name: Build Android APK
@@ -138,7 +163,7 @@ jobs:
           path: Titanhub-*.apk
 
   build-windows:
-    name: Build Windows App
+    name: Build Windows Flutter ZIP
     needs: test-and-lint
     runs-on: windows-latest
     steps:
@@ -223,7 +248,7 @@ jobs:
 
   publish-release:
     name: Publish Release to GitHub
-    needs: [build-android, build-windows, build-ios]
+    needs: [build-android, build-windows, build-ios, build-windows-electron]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
@@ -240,6 +265,12 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: windows-build
+          path: release-artifacts
+
+      - name: Download Windows Electron Installer
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-electron-installer
           path: release-artifacts
 
       - name: Download iOS Artifacts

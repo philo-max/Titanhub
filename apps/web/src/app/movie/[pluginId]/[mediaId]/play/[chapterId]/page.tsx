@@ -11,7 +11,8 @@ import {
 import { ArrowLeft, Play, Loader2, Compass } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { DanmakuComment } from '@/components/DanmakuLayer';
-import { useSyncStore } from '@/stores/syncStore';
+import { useSyncStore, type TrackingLog } from '@/stores/syncStore';
+import { findResumeLog } from '@/lib/resume-position';
 import { useAuthStore } from '@/stores/authStore';
 import { API_BASE } from '@/lib/config';
 import { playbackCache } from '@/lib/playbackCache';
@@ -44,6 +45,11 @@ interface VideoSource {
 }
 
 export default function MoviePlayPage({ params }: { params: Promise<Params> }) {
+  const identity = use(params);
+  return <MoviePlayPageContent key={JSON.stringify(identity)} params={params} />;
+}
+
+function MoviePlayPageContent({ params }: { params: Promise<Params> }) {
   const { pluginId, mediaId, chapterId } = use(params);
   const router = useRouter();
   const pageRef = useRef<HTMLDivElement>(null);
@@ -58,6 +64,27 @@ export default function MoviePlayPage({ params }: { params: Promise<Params> }) {
 
   const { saveProgress } = useSyncStore();
   const lastSyncTimeRef = useRef<number>(0);
+  const [resume, setResume] = useState<TrackingLog>();
+  const [resumeReady, setResumeReady] = useState(false);
+  const [progressError, setProgressError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    void useSyncStore.getState().pullTracking().then(() => {
+      if (cancelled) return;
+      const saved = findResumeLog(useSyncStore.getState().trackingList, {
+        mediaType: 'movie', pluginId, mediaId, chapterId,
+      });
+      setResume(saved);
+      setResumeReady(true);
+    }).catch(() => {
+      if (!cancelled) {
+        setError('读取播放进度失败，请重新打开本章。');
+        setResumeReady(true);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [pluginId, mediaId, chapterId]);
 
   useEffect(() => {
     const fetchPlaybackData = async () => {
@@ -133,13 +160,13 @@ export default function MoviePlayPage({ params }: { params: Promise<Params> }) {
 
   // GSAP Entrance Animations
   useEffect(() => {
-    if (!loading && sources.length > 0) {
+    if (!loading && resumeReady && sources.length > 0) {
       const ctx = animatePlayPageEntrance(pageRef.current);
       return () => {
         if (ctx) ctx.revert();
       };
     }
-  }, [loading, sources]);
+  }, [loading, resumeReady, sources]);
 
   // Determine next episode
   const getNextChapter = () => {
@@ -179,7 +206,7 @@ export default function MoviePlayPage({ params }: { params: Promise<Params> }) {
     });
   };
 
-  if (loading) {
+  if (loading || !resumeReady) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center text-textPrimary">
         <Loader2 className="h-10 w-10 text-primary animate-spin mb-4" />
@@ -236,7 +263,10 @@ export default function MoviePlayPage({ params }: { params: Promise<Params> }) {
 
         {/* Video Player Section */}
         <div className="animate-fade-play mb-12">
+          {progressError && <p role="alert" className="text-rose-500">{progressError}</p>}
           <VideoPlayer
+            initialPosition={resume?.position}
+            initialProgress={resume?.progress}
             sources={sources}
             title={currentChapter?.title || 'Current Chapter'}
             comments={comments}
@@ -245,9 +275,9 @@ export default function MoviePlayPage({ params }: { params: Promise<Params> }) {
             chapterId={chapterId}
             onSendComment={handleSendComment}
             onNextChapter={nextChapter ? handleNextChapterClick : undefined}
-            onProgress={(time, duration) => {
+            onProgress={(time, duration, force) => {
               // Sync every 5 seconds
-              if (time - lastSyncTimeRef.current > 5 || time < lastSyncTimeRef.current) {
+              if (force || time - lastSyncTimeRef.current > 5 || time < lastSyncTimeRef.current) {
                 lastSyncTimeRef.current = time;
                 saveProgress({
                   mediaId,
@@ -256,8 +286,9 @@ export default function MoviePlayPage({ params }: { params: Promise<Params> }) {
                   chapterNo: currentChapter?.chapterNo ?? 1,
                   chapterId,
                   progress: duration > 0 ? time / duration : 0,
+                  position: time,
                   status: 'watching',
-                });
+                }).catch(() => setProgressError('保存播放进度失败，请稍后重试。'));
               }
             }}
           />

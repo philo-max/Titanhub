@@ -11,10 +11,12 @@ import {
 import { ArrowLeft, Play, Loader2, Compass } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { DanmakuComment } from '@/components/DanmakuLayer';
-import { useSyncStore } from '@/stores/syncStore';
+import { useSyncStore, type TrackingLog } from '@/stores/syncStore';
+import { findResumeLog } from '@/lib/resume-position';
 import { useAuthStore } from '@/stores/authStore';
 import { API_BASE } from '@/lib/config';
 import { playbackCache } from '@/lib/playbackCache';
+import { findPlayableAlternative } from '@/lib/source-fallback';
 
 const VideoPlayer = dynamic(() => import('@/components/VideoPlayer'), {
   ssr: false,
@@ -44,6 +46,11 @@ interface VideoSource {
 }
 
 export default function AnimePlayPage({ params }: { params: Promise<Params> }) {
+  const identity = use(params);
+  return <AnimePlayPageContent key={JSON.stringify(identity)} params={params} />;
+}
+
+function AnimePlayPageContent({ params }: { params: Promise<Params> }) {
   const { pluginId, mediaId, chapterId } = use(params);
   const router = useRouter();
   const pageRef = useRef<HTMLDivElement>(null);
@@ -55,12 +62,53 @@ export default function AnimePlayPage({ params }: { params: Promise<Params> }) {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [fallbackNote, setFallbackNote] = useState('');
 
   const { saveProgress } = useSyncStore();
   const lastSyncTimeRef = useRef<number>(0);
+  const [resume, setResume] = useState<TrackingLog>();
+  const [resumeReady, setResumeReady] = useState(false);
+  const [progressError, setProgressError] = useState('');
 
   useEffect(() => {
+    let cancelled = false;
+    void useSyncStore.getState().pullTracking().then(() => {
+      if (cancelled) return;
+      const saved = findResumeLog(useSyncStore.getState().trackingList, {
+        mediaType: 'anime', pluginId, mediaId, chapterId,
+      });
+      setResume(saved);
+      setResumeReady(true);
+    }).catch(() => {
+      if (!cancelled) {
+        setError('读取播放进度失败，请重新打开本章。');
+        setResumeReady(true);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [pluginId, mediaId, chapterId]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const tryAlternativeSource = async (): Promise<boolean> => {
+      const detailData = await fetch(`${API_BASE}/api/plugins/${pluginId}/detail/${mediaId}`, { signal: controller.signal })
+        .then((r) => r.json())
+        .catch(() => null);
+      const title: string | undefined = detailData?.detail?.title;
+      if (!title) return false;
+      const tried = new URLSearchParams(window.location.search).get('tried')?.split(',').filter(Boolean) ?? [];
+      const found = await findPlayableAlternative({
+        title, pluginId, mediaId, chapterId, tried, signal: controller.signal,
+        onAttempt: (source, attempt, total) => setFallbackNote(`正在尝试其他来源：${source.pluginName}（${attempt}/${total}）`),
+      });
+      if (!found || controller.signal.aborted) return false;
+      playbackCache.set(found.pluginId, found.chapterId, { sources: found.videos });
+      router.replace(`/anime/${found.pluginId}/${found.mediaId}/play/${found.chapterId}?tried=${[...tried, pluginId].join(',')}`);
+      return true;
+    };
+
     const fetchPlaybackData = async () => {
+      let handedOff = false;
       // 1. Try to read from prefetch cache
       const cached = playbackCache.get(pluginId, chapterId);
       
@@ -86,24 +134,25 @@ export default function AnimePlayPage({ params }: { params: Promise<Params> }) {
       setLoading(true);
       setError('');
       try {
-        // Fetch video URL, chapter list and danmaku in parallel; chapters must
-        // survive a video failure so the error state can offer other episodes
-        const [videoData, chaptersData, danmakuData] = await Promise.all([
-          fetch(`${API_BASE}/api/plugins/${pluginId}/video/${chapterId}`)
-            .then((r) => r.json())
-            .catch(() => ({ error: '无法连接后端服务。' })),
-          fetch(`${API_BASE}/api/plugins/${pluginId}/chapters/${mediaId}`)
-            .then((r) => r.json())
-            .catch(() => ({ chapters: [] })),
-          fetch(`${API_BASE}/api/danmaku/${pluginId}/${mediaId}/${chapterId}`)
-            .then((r) => r.json())
-            .catch(() => ({ comments: [] })),
-        ]);
+        // Chapters and danmaku load in the background so a slow chapter list or
+        // danmaku source never delays playback; chapters must survive a video
+        // failure so the error state can offer other episodes
+        void fetch(`${API_BASE}/api/plugins/${pluginId}/chapters/${mediaId}`)
+          .then((r) => r.json())
+          .catch(() => ({ chapters: [] }))
+          .then((chaptersData) => {
+            const list: Chapter[] = chaptersData.chapters || [];
+            setChapters(list);
+            setCurrentChapter(list.find((c) => c.id === chapterId) || null);
+          });
+        void fetch(`${API_BASE}/api/danmaku/${pluginId}/${mediaId}/${chapterId}`)
+          .then((r) => r.json())
+          .catch(() => ({ comments: [] }))
+          .then((danmakuData) => setComments(danmakuData.comments || []));
 
-        const list: Chapter[] = chaptersData.chapters || [];
-        setChapters(list);
-        setCurrentChapter(list.find((c) => c.id === chapterId) || null);
-        setComments(danmakuData.comments || []);
+        const videoData = await fetch(`${API_BASE}/api/plugins/${pluginId}/video/${chapterId}`)
+          .then((r) => r.json())
+          .catch(() => ({ error: '无法连接后端服务。' }));
 
         if (videoData.error) {
           throw new Error(`获取视频链接失败: ${videoData.error}`);
@@ -115,24 +164,27 @@ export default function AnimePlayPage({ params }: { params: Promise<Params> }) {
         }
         setSources(sourceList);
       } catch (err: any) {
-        setError(err.message || '加载播放资源失败。');
+        const message = err.message || '加载播放资源失败。';
+        handedOff = await tryAlternativeSource().catch(() => false);
+        if (!handedOff && !controller.signal.aborted) setError(message);
       } finally {
-        setLoading(false);
+        if (!handedOff && !controller.signal.aborted) setLoading(false);
       }
     };
 
     fetchPlaybackData();
-  }, [pluginId, mediaId, chapterId]);
+    return () => controller.abort();
+  }, [pluginId, mediaId, chapterId, router]);
 
   // GSAP Entrance Animations
   useEffect(() => {
-    if (!loading && sources.length > 0) {
+    if (!loading && resumeReady && sources.length > 0) {
       const ctx = animatePlayPageEntrance(pageRef.current);
       return () => {
         if (ctx) ctx.revert();
       };
     }
-  }, [loading, sources]);
+  }, [loading, resumeReady, sources]);
 
   // Determine next episode
   const getNextChapter = () => {
@@ -172,12 +224,12 @@ export default function AnimePlayPage({ params }: { params: Promise<Params> }) {
     });
   };
 
-  if (loading) {
+  if (loading || !resumeReady) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center text-textPrimary">
         <Loader2 className="h-10 w-10 text-primary animate-spin mb-4" />
         <p className="text-sm text-textSecondary">正在解析播放源...</p>
-        <p className="text-xs text-textTertiary mt-2">首次解析约需 10-15 秒，已缓存的视频秒开</p>
+        <p className="text-xs text-textTertiary mt-2">{fallbackNote || '首次解析约需 10-15 秒，已缓存的视频秒开'}</p>
       </div>
     );
   }
@@ -256,7 +308,10 @@ export default function AnimePlayPage({ params }: { params: Promise<Params> }) {
 
         {/* Video Player Section */}
         <div className="animate-fade-play mb-12">
+          {progressError && <p role="alert" className="text-rose-500">{progressError}</p>}
           <VideoPlayer
+            initialPosition={resume?.position}
+            initialProgress={resume?.progress}
             sources={sources}
             title={currentChapter?.title || 'Current Chapter'}
             comments={comments}
@@ -265,9 +320,9 @@ export default function AnimePlayPage({ params }: { params: Promise<Params> }) {
             chapterId={chapterId}
             onSendComment={handleSendComment}
             onNextChapter={nextChapter ? handleNextChapterClick : undefined}
-            onProgress={(time, duration) => {
+            onProgress={(time, duration, force) => {
               // Sync every 5 seconds
-              if (time - lastSyncTimeRef.current > 5 || time < lastSyncTimeRef.current) {
+              if (force || time - lastSyncTimeRef.current > 5 || time < lastSyncTimeRef.current) {
                 lastSyncTimeRef.current = time;
                 saveProgress({
                   mediaId,
@@ -276,8 +331,9 @@ export default function AnimePlayPage({ params }: { params: Promise<Params> }) {
                   chapterNo: currentChapter?.chapterNo ?? 1,
                   chapterId,
                   progress: duration > 0 ? time / duration : 0,
+                  position: time,
                   status: 'watching',
-                });
+                }).catch(() => setProgressError('保存播放进度失败，请稍后重试。'));
               }
             }}
           />
