@@ -19,6 +19,10 @@ import { animateControlsVisibility } from '../lib/animations';
 import { API_BASE } from '@/lib/config';
 import { videoResumeTime } from '@/lib/resume-position';
 import { bindProgressFlush } from '@/lib/progress-flush';
+import { bindVideoKeyboard } from '@/lib/video-keyboard';
+
+const KEYBOARD_SEEK_SECONDS = 5;
+const KEYBOARD_VOLUME_STEP = 0.05;
 
 export interface VideoSource {
   quality: string;
@@ -216,16 +220,17 @@ export default function VideoPlayer({
   }, [playbackSpeed]);
 
   // Handle play/pause toggle
-  const togglePlay = () => {
-    if (!videoRef.current) return;
-    if (isPlaying) {
-      videoRef.current.pause();
-      setIsPlaying(false);
+  const togglePlay = useCallback(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (!video.paused) {
+      video.pause();
     } else {
-      videoRef.current.play().catch(() => {});
-      setIsPlaying(true);
+      video.play().catch((error) => {
+        console.warn('[VideoPlayer] Playback failed:', error);
+      });
     }
-  };
+  }, []);
 
   // Switch Quality source seamlessly (preserving current time)
   const handleQualityChange = (source: VideoSource) => {
@@ -277,19 +282,19 @@ export default function VideoPlayer({
   };
 
   // Toggle mute
-  const toggleMute = () => {
+  const toggleMute = useCallback(() => {
     if (!videoRef.current) return;
-    const muted = !isMuted;
+    const muted = !(videoRef.current.muted || videoRef.current.volume === 0);
     videoRef.current.muted = muted;
     setIsMuted(muted);
-    if (!muted && volume === 0) {
+    if (!muted && videoRef.current.volume === 0) {
       videoRef.current.volume = 0.5;
       setVolume(0.5);
     }
-  };
+  }, []);
 
   // Toggle fullscreen
-  const toggleFullscreen = () => {
+  const toggleFullscreen = useCallback(() => {
     if (!containerRef.current) return;
 
     if (!document.fullscreenElement) {
@@ -299,7 +304,7 @@ export default function VideoPlayer({
       document.exitFullscreen();
       setIsFullscreen(false);
     }
-  };
+  }, []);
 
   // Track fullscreen changes via ESC or native buttons
   useEffect(() => {
@@ -396,6 +401,27 @@ export default function VideoPlayer({
     };
   }, [isPlaying, showControls]);
 
+  useEffect(() => bindVideoKeyboard(document, (action) => {
+    const video = videoRef.current;
+    if (!video) return;
+    showControls();
+    if (action === 'togglePlay') togglePlay();
+    else if (action === 'toggleMute') toggleMute();
+    else if (action === 'toggleFullscreen') toggleFullscreen();
+    else if (action === 'seekBackward' || action === 'seekForward') {
+      if (!Number.isFinite(video.duration) || video.duration <= 0) return;
+      const delta = action === 'seekForward' ? KEYBOARD_SEEK_SECONDS : -KEYBOARD_SEEK_SECONDS;
+      video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + delta));
+      setCurrentTime(video.currentTime);
+    } else {
+      const delta = action === 'volumeUp' ? KEYBOARD_VOLUME_STEP : -KEYBOARD_VOLUME_STEP;
+      video.volume = Math.max(0, Math.min(1, video.volume + delta));
+      if (video.volume > 0) video.muted = false;
+      setVolume(video.volume);
+      setIsMuted(video.muted || video.volume === 0);
+    }
+  }), [showControls, togglePlay, toggleMute, toggleFullscreen]);
+
   return (
     <div
       ref={containerRef}
@@ -411,6 +437,9 @@ export default function VideoPlayer({
       <video
         ref={videoRef}
         onClick={togglePlay}
+        onPlay={() => setIsPlaying(true)}
+        onPause={() => setIsPlaying(false)}
+        onEnded={() => setIsPlaying(false)}
         onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={handleLoadedMetadata}
         className="w-full h-full object-contain cursor-pointer"
@@ -466,6 +495,8 @@ export default function VideoPlayer({
             {/* Play/Pause */}
             <button
               onClick={togglePlay}
+              title={isPlaying ? '暂停（空格）' : '播放（空格）'}
+              aria-label={isPlaying ? '暂停' : '播放'}
               className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition cursor-pointer active:scale-95"
             >
               {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5 fill-white" />}
@@ -481,6 +512,8 @@ export default function VideoPlayer({
             <div className="flex items-center space-x-2">
               <button
                 onClick={toggleMute}
+                title={isMuted ? '取消静音（M）' : '静音（M）'}
+                aria-label={isMuted ? '取消静音' : '静音'}
                 className="p-2 text-textTertiary hover:text-textPrimary transition cursor-pointer"
               >
                 {isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
@@ -587,6 +620,8 @@ export default function VideoPlayer({
             {/* Fullscreen */}
             <button
               onClick={toggleFullscreen}
+              title={isFullscreen ? '退出全屏（F）' : '全屏（F）'}
+              aria-label={isFullscreen ? '退出全屏' : '全屏'}
               className="p-2 rounded-xl bg-white/5 text-textTertiary hover:text-textPrimary transition cursor-pointer active:scale-95"
             >
               {isFullscreen ? <Minimize className="h-5 w-5" /> : <Maximize className="h-5 w-5" />}

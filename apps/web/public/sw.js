@@ -1,4 +1,4 @@
-const CACHE_NAME = 'titanhub-static-v1';
+const CACHE_NAME = 'titanhub-static-v2';
 const PRECACHE_URLS = ['/', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png', '/logo.png'];
 
 self.addEventListener('install', (event) => {

@@ -1,4 +1,5 @@
 <p align="center">
+  <img src="apps/web/public/icon-192.png" width="128" height="128" alt="Titanhub 手绘拟人 Logo" />
   <h1>Titanhub</h1>
   <p><strong>One App, All ACG Content.</strong></p>
   <p>Anime / Manga / Novel / Movie — 聚合搜索、追番追踪、弹幕播放，一站式搞定。</p>
@@ -59,15 +60,17 @@ Web 端内容卡片实现了 144Hz 锁帧的 GPU 加速 3D 悬停倾斜效果（
 
 内置弹幕路由（`/danmaku`），支持弹幕获取、发送和增强过滤。
 
-## 📥 客户端下载与使用指南 (v1.0.7)
+## 📥 客户端下载与使用指南 (v1.0.8)
 
-当前已发布 [Titanhub v1.0.7](https://github.com/philo-max/Titanhub/releases/tag/v1.0.7)，本次附件为 **Windows x64 Electron 安装包**：
+当前已发布 [Titanhub v1.0.8](https://github.com/philo-max/Titanhub/releases/tag/v1.0.8)，本次附件为 **Windows x64 Electron 安装包**，包含新的手绘拟人 Logo 与视频快捷键：
 
-1. 下载 [Titanhub-Setup-1.0.7-x64.exe](https://github.com/philo-max/Titanhub/releases/download/v1.0.7/Titanhub-Setup-1.0.7-x64.exe)。
+1. 下载 [Titanhub-Setup-1.0.8-x64.exe](https://github.com/philo-max/Titanhub/releases/download/v1.0.8/Titanhub-Setup-1.0.8-x64.exe)。
 2. 如已运行旧版，先正常退出程序，再运行安装向导；支持选择安装目录、创建快捷方式和系统卸载。
 3. 安装后直接打开，无需注册、安装 Node.js/PostgreSQL 或手动启动后端，即可使用本地收藏与观看、阅读进度。
 
-Android、iOS 与 Flutter Windows 是独立构建目标，**v1.0.7 未提供这些平台的附件**。需要自行构建时，请参阅下方开发说明；后续下载以 [Releases](https://github.com/philo-max/Titanhub/releases) 实际附件为准。
+播放页支持：空格播放/暂停、左右键快退/快进 5 秒、上下键调节音量 5%、M 静音、F 全屏。输入弹幕时不会触发播放器快捷键。
+
+Android、iOS 与 Flutter Windows 是独立构建目标，**v1.0.8 未提供这些平台的附件**。需要自行构建时，请参阅下方开发说明；后续下载以 [Releases](https://github.com/philo-max/Titanhub/releases) 实际附件为准。
 
 > [!TIP]
 > **本地联调与后端连接配置：**
@@ -80,7 +83,7 @@ Android、iOS 与 Flutter Windows 是独立构建目标，**v1.0.7 未提供这�
 
 ## Windows 本地资料与可选 WebDAV
 
-Windows 新安装或旧版升级请使用已发布的 **1.0.7** 安装包。升级前先正常退出旧程序，无需清空本地资料；默认卸载也会保留用户资料。
+Windows 新安装或旧版升级请使用已发布的 **1.0.8** 安装包。升级前先正常退出旧程序，无需清空本地资料；默认卸载也会保留用户资料。
 
 首页、搜索和排行推荐已排除内置演示来源；部分来源失败时仍显示有效结果，可展开查看失败来源。Bangumi 提供番剧资料，不提供视频播放源，其他来源的播放和阅读能力仍需逐个适配、验证。来源可用性受站点规则与网络环境影响，搜索到内容不代表一定可以播放或阅读。
 
