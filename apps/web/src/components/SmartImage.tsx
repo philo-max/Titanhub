@@ -85,8 +85,10 @@ export default function SmartImage({
   priority?: boolean;
   fallbackSrc?: string;
 }) {
-  const [imgError, setImgError] = useState(false);
-  const [optimError, setOptimError] = useState(false);
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const [failedOptimSrc, setFailedOptimSrc] = useState<string | null>(null);
+  const imgError = failedSrc === src;
+  const optimError = failedOptimSrc === src;
 
   // Empty or undefined src — use placeholder directly
   if (!src) {
@@ -142,13 +144,14 @@ export default function SmartImage({
       );
     }
     return (
+      /* eslint-disable-next-line @next/next/no-img-element */
       <img
         src={src}
         alt={alt}
         className={className}
         loading="lazy"
         decoding="async"
-        onError={() => setImgError(true)}
+        onError={() => setFailedSrc(src)}
       />
     );
   }
@@ -163,7 +166,7 @@ export default function SmartImage({
         sizes={sizes || '100vw'}
         className={className}
         priority={priority}
-        onError={() => setOptimError(true)}
+        onError={() => setFailedOptimSrc(src)}
       />
     );
   }
@@ -176,7 +179,7 @@ export default function SmartImage({
       height={height || 352}
       className={className}
       priority={priority}
-      onError={() => setOptimError(true)}
+      onError={() => setFailedOptimSrc(src)}
     />
   );
 }

@@ -11,6 +11,7 @@ import '../../../core/identity/media_identity.dart';
 import '../../../core/playback/chapter_groups.dart';
 import '../../../core/playback/mpv_tuning.dart';
 import '../../../core/playback/resume_target.dart';
+import '../../../core/playback/video_renderer.dart';
 import '../../../core/router/app_router.dart';
 import '../../../core/sources/local_sources.dart';
 import '../../media/providers/media_providers.dart';
@@ -55,6 +56,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
   StreamSubscription? _playingSub;
   StreamSubscription? _completedSub;
   StreamSubscription? _errorSub;
+  StreamSubscription? _logSub;
   ProviderSubscription<AsyncValue<List<VideoSource>>>? _sourcesSub;
 
   // Active status
@@ -91,6 +93,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
   bool _controlsVisible = true;
   bool _fullscreen = false;
   bool _handingOffFullscreen = false;
+  late final VideoRendererMode _rendererMode;
+  bool _rendererFallbackStarted = false;
 
   // Danmakus overlay
   final List<_ActiveDanmaku> _activeDanmakus = [];
@@ -113,8 +117,23 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
       types: ref.read(sourceByIdProvider(widget.pluginId))?.types,
       mediaId: widget.mediaId,
     );
-    _player = Player(configuration: const PlayerConfiguration(bufferSize: mpvDemuxerBufferBytes));
-    _controller = VideoController(_player);
+    _player = Player(
+      configuration: const PlayerConfiguration(
+        bufferSize: mpvDemuxerBufferBytes,
+        logLevel: MPVLogLevel.warn,
+      ),
+    );
+    _rendererMode = VideoRendererPreference.mode;
+    _controller = VideoController(
+      _player,
+      configuration: videoControllerConfigurationFor(_rendererMode),
+    );
+    // GPU 上下文建不起来时 mpv 只会写 error 日志、不会抛 player.error，
+    // 画面黑但时间轴照走——必须从日志里抓。
+    _logSub = _player.stream.log.listen((log) {
+      if (_rendererMode != VideoRendererMode.gpu) return;
+      if (isGpuContextFailureLog(prefix: log.prefix, text: log.text)) _fallbackToMediaCodec();
+    });
     _restoreSavedPosition();
     if (widget.startFullscreen) {
       _fullscreen = true;
@@ -294,6 +313,30 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
     );
   }
 
+  /// vo 只能在 VideoController 创建时确定，原地换不了；记住偏好后用同一路由重建播放页。
+  /// 自动回退只触发一次，回退后的页面 _rendererMode 已不是 gpu，不会再进来，杜绝循环重开。
+  void _fallbackToMediaCodec() {
+    if (_rendererFallbackStarted || _disposed || !mounted) return;
+    _switchRendererMode(VideoRendererMode.mediacodecEmbed);
+  }
+
+  void _switchRendererMode(VideoRendererMode nextMode) {
+    if (_rendererFallbackStarted || _disposed || !mounted || nextMode == _rendererMode) return;
+    _rendererFallbackStarted = true;
+    VideoRendererPreference.setMode(nextMode);
+    _saveProgress(force: true);
+    _handingOffFullscreen = _fullscreen;
+    context.pushReplacement(
+      playLocation(
+        pluginId: widget.pluginId,
+        mediaId: widget.mediaId,
+        chapterId: widget.chapterId,
+        groupId: _currentLineId,
+      ),
+      extra: _fullscreen ? playerFullscreenExtra : null,
+    );
+  }
+
   void _retry() {
     _preferredQuality = _activeSource?.quality ?? _preferredQuality;
     _retryPosition = _player.state.position;
@@ -364,6 +407,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
     _playingSub?.cancel();
     _completedSub?.cancel();
     _errorSub?.cancel();
+    _logSub?.cancel();
     _sourcesSub?.close();
     if (_fullscreen && !_handingOffFullscreen) _applySystemUi(fullscreen: false);
     _player.dispose();
@@ -853,6 +897,35 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
                           }).toList(),
                         ),
                       const SizedBox(width: 12),
+
+                      // Renderer Mode Selector (GPU vs MediaCodec Direct Surface)
+                      PopupMenuButton<VideoRendererMode>(
+                        initialValue: _rendererMode,
+                        tooltip: '渲染输出模式（黑屏时可切换硬解）',
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.white10,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            _rendererMode == VideoRendererMode.gpu ? 'GPU' : '硬解',
+                            style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        onSelected: _switchRendererMode,
+                        itemBuilder: (context) => const [
+                          PopupMenuItem<VideoRendererMode>(
+                            value: VideoRendererMode.gpu,
+                            child: Text('GPU 渲染 (默认)', style: TextStyle(fontSize: 12)),
+                          ),
+                          PopupMenuItem<VideoRendererMode>(
+                            value: VideoRendererMode.mediacodecEmbed,
+                            child: Text('MediaCodec 直出 (防黑屏)', style: TextStyle(fontSize: 12)),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(width: 8),
 
                       // Playback Speed Selector
                       PopupMenuButton<double>(

@@ -200,6 +200,7 @@ function MangaReaderPageContent({ params }: { params: Promise<Params> }) {
   const imageContainerRef = useRef<HTMLDivElement>(null);
   const currentPageRef = useRef(currentPage);
   currentPageRef.current = currentPage;
+  const anchoringRef = useRef(false);
 
   // Fetch images and chapters
   useEffect(() => {
@@ -257,24 +258,32 @@ function MangaReaderPageContent({ params }: { params: Promise<Params> }) {
   }, [loading, resumeReady, restored, images.length, resume]);
 
   useEffect(() => {
-    if (!restored || mode !== 'vertical') return;
+    if (!restored || mode !== 'vertical') {
+      anchoringRef.current = false;
+      return;
+    }
     const container = imageContainerRef.current;
-    const target = container?.children[currentPageRef.current];
+    const anchorIndex = currentPageRef.current;
+    const target = container?.children[anchorIndex];
     if (!container || !target) return;
-    let anchoring = true;
+    anchoringRef.current = anchorIndex > 0;
     let frame = 0;
     const alignPage = () => {
-      if (!anchoring) return;
+      if (!anchoringRef.current) return;
       cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => target.scrollIntoView({ block: 'start', behavior: 'instant' }));
+      frame = requestAnimationFrame(() => {
+        target.scrollIntoView({ block: 'start', behavior: 'instant' });
+        setCurrentPage(anchorIndex);
+      });
     };
-    const stopAnchoring = () => { anchoring = false; cancelAnimationFrame(frame); };
+    const stopAnchoring = () => { anchoringRef.current = false; cancelAnimationFrame(frame); };
     const observer = new ResizeObserver(alignPage);
     observer.observe(container);
-    alignPage();
+    if (anchorIndex > 0) alignPage();
     const events = ['wheel', 'touchstart', 'pointerdown', 'keydown'] as const;
     events.forEach((event) => window.addEventListener(event, stopAnchoring, { passive: true }));
     return () => {
+      anchoringRef.current = false;
       cancelAnimationFrame(frame);
       observer.disconnect();
       events.forEach((event) => window.removeEventListener(event, stopAnchoring));
@@ -284,6 +293,7 @@ function MangaReaderPageContent({ params }: { params: Promise<Params> }) {
   useEffect(() => {
     if (!restored || mode !== 'vertical') return;
     const handleScroll = () => {
+      if (anchoringRef.current) return;
       const pages = imageContainerRef.current?.children;
       if (!pages) return;
       const index = Array.from(pages).findIndex((page) => page.getBoundingClientRect().bottom > 0);

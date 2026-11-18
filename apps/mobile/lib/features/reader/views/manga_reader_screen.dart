@@ -36,6 +36,7 @@ class _MangaReaderScreenState extends ConsumerState<MangaReaderScreen>
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final ScrollController _scrollController = ScrollController();
   final Map<int, GlobalKey> _pageKeys = {};
+  final Map<int, int> _pageRetryCounts = {};
 
   late final String _mediaType;
   late final SyncService _syncService;
@@ -227,6 +228,14 @@ class _MangaReaderScreenState extends ConsumerState<MangaReaderScreen>
     _transformationController.value = Matrix4.identity();
   }
 
+  Future<void> _retryPage(int index, String url) async {
+    await CachedNetworkImage.evictFromCache(url);
+    if (!mounted || _disposed) return;
+    setState(() {
+      _pageRetryCounts[index] = (_pageRetryCounts[index] ?? 0) + 1;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final imagesAsync = ref.watch(mangaPagesProvider((
@@ -338,6 +347,9 @@ class _MangaReaderScreenState extends ConsumerState<MangaReaderScreen>
                       child: Column(
                         children: [
                           CachedNetworkImage(
+                            key: (_pageRetryCounts[index] ?? 0) > 0
+                                ? ValueKey('manga-page-$index-retry-${_pageRetryCounts[index]}')
+                                : null,
                             imageUrl: images[index],
                             httpHeaders: ref.read(localPluginRunnerProvider).imageHeadersFor(widget.pluginId, images[index]),
                             fit: BoxFit.contain,
@@ -348,10 +360,24 @@ class _MangaReaderScreenState extends ConsumerState<MangaReaderScreen>
                                 child: CircularProgressIndicator(color: AppTheme.primary),
                               ),
                             ),
-                            errorWidget: (context, url, error) => Container(
-                              height: 200,
-                              color: AppTheme.surface,
-                              child: const Icon(LucideIcons.image, color: AppTheme.textSecondary),
+                            errorWidget: (context, url, error) => GestureDetector(
+                              onTap: () => _retryPage(index, url),
+                              child: Container(
+                                height: 200,
+                                color: AppTheme.surface,
+                                alignment: Alignment.center,
+                                child: const Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(LucideIcons.refreshCw, color: AppTheme.textSecondary),
+                                    SizedBox(height: 6),
+                                    Text(
+                                      '图片加载失败，点击重试',
+                                      style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
                           ),
                           const SizedBox(height: 6),
