@@ -36,8 +36,12 @@ class LocalPluginRunner {
 
   VeneraSource? veneraSource(String pluginId) => _veneraSources[pluginId];
 
-  Map<String, String>? imageHeadersFor(String pluginId, String url) =>
-      _veneraSources[pluginId]?.imageHeaders(url);
+  Map<String, String>? imageHeadersFor(String pluginId, String url) {
+    if (pluginId == 'mangadex') {
+      return const {'User-Agent': 'Titanhub/1.1.0 (Android)'};
+    }
+    return _veneraSources[pluginId]?.imageHeaders(url);
+  }
 
   void registerKazumiRule(KazumiRule rule) {
     if (rule.pluginId == SevenSeFunSource.pluginId) return;

@@ -23,6 +23,7 @@ class ComicSource {
   loadSetting(key) {
     if (this.__settings.has(key)) return this.__settings.get(key);
     const setting = this.settings && this.settings[key];
+    if (setting !== undefined && setting !== null && typeof setting !== 'object' && typeof setting !== 'function') return setting;
     return setting && Object.prototype.hasOwnProperty.call(setting, 'default') ? setting.default : null;
   }
   saveSetting(key, value) { this.__settings.set(key, value); }

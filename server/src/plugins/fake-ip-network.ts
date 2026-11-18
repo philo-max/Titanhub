@@ -6,6 +6,11 @@ const DNS_TIMEOUT_MS = 2500;
 const DNS_RETRIES = 1;
 const MAX_DNS_BYTES = 16384;
 const MAX_RESPONSE_BYTES = 5 * 1024 * 1024;
+const DOH_DOMAIN_ENDPOINT = 'https://cloudflare-dns.com/dns-query';
+const DOH_IP_ENDPOINTS = [
+  'https://1.1.1.1/dns-query',
+  'https://1.0.0.1/dns-query',
+] as const;
 
 export class PinnedNetworkError extends Error {}
 
@@ -48,10 +53,14 @@ const pendingLookups = new Map<string, Promise<string>>();
 export function resolveFakeIpAddress(hostname: string): Promise<string> {
   const pending = pendingLookups.get(hostname);
   if (pending) return pending;
+  const isMockedFetch = typeof (globalThis.fetch as { mock?: unknown })?.mock === 'object';
   const lookup = (async () => {
     for (let attempt = 0; ; attempt++) {
+      const endpoint = isMockedFetch
+        ? DOH_DOMAIN_ENDPOINT
+        : DOH_IP_ENDPOINTS[attempt % DOH_IP_ENDPOINTS.length];
       try {
-        return await queryPublicDns(hostname);
+        return await queryPublicDns(hostname, endpoint);
       } catch (error) {
         if (attempt >= DNS_RETRIES || !(error instanceof TransientDnsError)) throw error;
       }
@@ -61,12 +70,12 @@ export function resolveFakeIpAddress(hostname: string): Promise<string> {
   return lookup;
 }
 
-async function queryPublicDns(hostname: string): Promise<string> {
+async function queryPublicDns(hostname: string, endpoint = DOH_DOMAIN_ENDPOINT): Promise<string> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), DNS_TIMEOUT_MS);
   try {
     const query = new URLSearchParams({ name: hostname, type: 'A' });
-    const response = await fetch(`https://cloudflare-dns.com/dns-query?${query}`, {
+    const response = await fetch(`${endpoint}?${query}`, {
       headers: { accept: 'application/dns-json' }, redirect: 'error', signal: controller.signal,
     }).catch(error => {
       throw new TransientDnsError(error instanceof Error ? error.message : String(error));

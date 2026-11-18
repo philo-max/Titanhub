@@ -27,8 +27,17 @@ function isXPathSelector(selector: string): boolean {
   return /^(\/|\.\/|\(\/)/.test(selector);
 }
 
+function normalizeXPathExpression(expression: string): string {
+  const trimmed = expression.trim();
+  if (trimmed === '//') return '/*';
+  return trimmed
+    .replace(/@([\w:-]+)\*=\s*('[^']*'|"[^"]*")/g, 'contains(@$1, $2)')
+    .replace(/@([\w:-]+)\^=\s*('[^']*'|"[^"]*")/g, 'starts-with(@$1, $2)');
+}
+
 function executeXPath(html: string, expression: string): any[] {
   try {
+    const normalizedExpr = normalizeXPathExpression(expression);
     const cheerio = require('cheerio');
     const xpath = require('xpath');
     const { DOMParser } = require('@xmldom/xmldom');
@@ -50,7 +59,7 @@ function executeXPath(html: string, expression: string): any[] {
 
     // 3. Evaluate XPath
     const select = xpath.useNamespaces({});
-    const result = select(expression, doc);
+    const result = select(normalizedExpr, doc);
 
     if (!Array.isArray(result)) {
       return [];

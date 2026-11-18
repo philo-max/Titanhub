@@ -499,9 +499,11 @@ class KazumiSource {
   }
 
   List<Node> _select(Node context, String expression, String label) {
-    if (expression.trim().isEmpty) {
+    final trimmed = expression.trim();
+    if (trimmed.isEmpty) {
       throw KazumiSourceException('$_label 规则的$label XPath 为空');
     }
+    if (trimmed == '//') return [context];
     try {
       return [for (final item in HtmlXPath.node(context).query(expression).nodes) item.node];
     } catch (error) {

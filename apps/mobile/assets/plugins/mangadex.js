@@ -146,6 +146,12 @@ async function fetchFeed(mediaId, languages) {
   return collected;
 }
 
+function isReadable(item) {
+  const attributes = (item && item.attributes) || {};
+  if (attributes.externalUrl) return false;
+  return !(typeof attributes.pages === 'number' && attributes.pages <= 0);
+}
+
 const plugin = {
   id: 'mangadex',
   name: 'MangaDex 漫画',
@@ -214,19 +220,15 @@ const plugin = {
   },
 
   async getChapters(mediaId) {
-    let list = await fetchFeed(mediaId, ['zh', 'zh-hk']);
+    let list = (await fetchFeed(mediaId, ['zh', 'zh-hk'])).filter(isReadable);
     if (list.length === 0) {
-      list = await fetchFeed(mediaId, ['en']);
+      list = (await fetchFeed(mediaId, ['en'])).filter(isReadable);
     }
     if (list.length === 0) {
-      list = await fetchFeed(mediaId, ['ja', 'ja-ro']);
+      list = (await fetchFeed(mediaId, ['ja', 'ja-ro'])).filter(isReadable);
     }
 
     const chapters = list
-      .filter((item) => {
-        const attributes = item.attributes || {};
-        return attributes.pages === undefined || attributes.pages === null || attributes.pages > 0;
-      })
       .map((item) => {
         const attributes = item.attributes || {};
         const number = chapterNumber(attributes);
