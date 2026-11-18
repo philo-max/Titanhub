@@ -4,9 +4,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
-import 'package:drift/drift.dart' show Value;
 import '../providers/media_providers.dart';
-import '../../../core/storage/app_database.dart';
+import '../models/media_models.dart';
+import '../widgets/episode_selector.dart';
+import '../../../core/identity/media_identity.dart';
+import '../../../core/playback/chapter_groups.dart';
+import '../../../core/router/app_router.dart';
+import '../../../core/sources/local_sources.dart';
+import '../../../core/sources/media_source.dart';
 import '../../tracking/sync_provider.dart';
 
 class DetailScreen extends ConsumerWidget {
@@ -19,17 +24,66 @@ class DetailScreen extends ConsumerWidget {
     required this.mediaId,
   });
 
+  String _mediaType(WidgetRef ref) {
+    final source = ref.watch(sourceByIdProvider(pluginId));
+    return resolveMediaType(types: source?.types, mediaId: mediaId);
+  }
+
+  void _openChapter(BuildContext context, WidgetRef ref, String chapterId, {String? groupId}) {
+    final source = ref.read(sourceByIdProvider(pluginId));
+    if (source == null) {
+      _toast(context, '本机未安装来源「$pluginId」。');
+      return;
+    }
+    if (source.supports(MediaCapability.images)) {
+      context.push(readLocation(
+        route: 'manga-read',
+        pluginId: pluginId,
+        mediaId: mediaId,
+        chapterId: chapterId,
+      ));
+    } else if (source.supports(MediaCapability.content)) {
+      context.push(readLocation(
+        route: 'novel-read',
+        pluginId: pluginId,
+        mediaId: mediaId,
+        chapterId: chapterId,
+      ));
+    } else if (source.supports(MediaCapability.video)) {
+      context.push(playLocation(
+        pluginId: pluginId,
+        mediaId: mediaId,
+        chapterId: chapterId,
+        groupId: groupId,
+      ));
+    } else {
+      _toast(context, '来源「${source.name}」只提供资料与章节，没有可播放/可阅读内容。');
+    }
+  }
+
+  void _toast(BuildContext context, String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: AppTheme.surfaceElevated),
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final detailAsync = ref.watch(mediaDetailProvider((pluginId: pluginId, mediaId: mediaId)));
-    final chaptersAsync = ref.watch(mediaChaptersProvider((pluginId: pluginId, mediaId: mediaId)));
+    final arg = (pluginId: pluginId, mediaId: mediaId);
+    final detailAsync = ref.watch(mediaDetailProvider(arg));
+    final chaptersAsync = ref.watch(mediaChaptersProvider(arg));
+    final source = ref.watch(sourceByIdProvider(pluginId));
+    final identity = MediaIdentity(
+      pluginId: pluginId,
+      mediaType: _mediaType(ref),
+      mediaId: mediaId,
+    );
 
     return Scaffold(
-      backgroundColor: AppTheme.background, // Slate 950
+      backgroundColor: AppTheme.background,
       body: detailAsync.when(
         data: (detail) => CustomScrollView(
           slivers: [
-            // Flexible App Bar with Hero cover image
             SliverAppBar(
               expandedHeight: 300,
               backgroundColor: Colors.transparent,
@@ -37,60 +91,47 @@ class DetailScreen extends ConsumerWidget {
               pinned: true,
               leading: IconButton(
                 icon: const Icon(LucideIcons.arrowLeft, color: Colors.white),
+                tooltip: '返回',
                 onPressed: () => context.pop(),
               ),
               actions: [
-                ref.watch(isFavoriteProvider(mediaId)).when(
-                  data: (isFav) => IconButton(
-                    icon: Icon(
-                      isFav ? LucideIcons.bookmark : LucideIcons.bookmark,
-                      color: isFav ? AppTheme.primary : Colors.white,
+                ref.watch(favoriteStatusProvider(identity)).when(
+                      data: (isFav) => IconButton(
+                        tooltip: isFav ? '取消收藏' : '收藏',
+                        icon: Icon(
+                          LucideIcons.bookmark,
+                          color: isFav ? AppTheme.primary : Colors.white,
+                        ),
+                        onPressed: () async {
+                          final sync = ref.read(syncServiceProvider);
+                          await sync.setFavorite(identity, !isFav);
+                          if (!context.mounted) return;
+                          _toast(context, isFav ? '已取消收藏' : '已加入收藏');
+                        },
+                      ),
+                      loading: () => const SizedBox(),
+                      error: (_, __) => const SizedBox(),
                     ),
-                    onPressed: () async {
-                      final db = ref.read(databaseProvider);
-                      if (isFav) {
-                        await db.deleteFavorite(mediaId);
-                      } else {
-                        await db.saveFavorite(LocalFavoritesCompanion(
-                          id: Value(DateTime.now().millisecondsSinceEpoch.toString()),
-                          mediaId: Value(mediaId),
-                          pluginId: Value(pluginId),
-                          mediaType: Value(mediaId.contains('manga') ? 'manga' : mediaId.contains('novel') ? 'novel' : 'anime'),
-                        ));
-                      }
-                    },
-                  ),
-                  loading: () => const SizedBox(),
-                  error: (_, __) => const SizedBox(),
-                ),
               ],
               flexibleSpace: FlexibleSpaceBar(
                 background: Stack(
                   fit: StackFit.expand,
                   children: [
-                    // Blur backdrop
                     CachedNetworkImage(
                       imageUrl: detail.cover,
                       fit: BoxFit.cover,
                       errorWidget: (_, __, ___) => const SizedBox(),
                     ),
-                    Container(
-                      color: Colors.black.withOpacity(0.5),
-                    ),
-                    // Bottom gradient transition
+                    Container(color: Colors.black.withOpacity(0.5)),
                     Container(
                       decoration: const BoxDecoration(
                         gradient: LinearGradient(
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
-                          colors: [
-                            Colors.transparent,
-                            AppTheme.background,
-                          ],
+                          colors: [Colors.transparent, AppTheme.background],
                         ),
                       ),
                     ),
-                    // Centered poster image
                     Align(
                       alignment: Alignment.bottomCenter,
                       child: Container(
@@ -122,15 +163,12 @@ class DetailScreen extends ConsumerWidget {
                 ),
               ),
             ),
-
-            // Metadata Detail block
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Title
                     Center(
                       child: Text(
                         detail.title,
@@ -142,9 +180,16 @@ class DetailScreen extends ConsumerWidget {
                         ),
                       ),
                     ),
+                    if (source != null) ...[
+                      const SizedBox(height: 8),
+                      Center(
+                        child: Text(
+                          '${source.name} · ${source.capabilitySummary}',
+                          style: const TextStyle(fontSize: 11, color: AppTheme.textTertiary),
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 16),
-
-                    // Genres
                     Center(
                       child: Wrap(
                         spacing: 8,
@@ -162,8 +207,6 @@ class DetailScreen extends ConsumerWidget {
                       ),
                     ),
                     const SizedBox(height: 16),
-
-                    // Author & Update Grid
                     Container(
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       decoration: const BoxDecoration(
@@ -175,86 +218,106 @@ class DetailScreen extends ConsumerWidget {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceAround,
                         children: [
-                          Row(
-                            children: [
-                              const Icon(LucideIcons.user, size: 16, color: AppTheme.primary),
-                              const SizedBox(width: 8),
-                              Text(
-                                '作者: ${detail.author ?? '未知'}',
-                                style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary),
-                              ),
-                            ],
+                          Flexible(
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(LucideIcons.user, size: 16, color: AppTheme.primary),
+                                const SizedBox(width: 8),
+                                Flexible(
+                                  child: Text(
+                                    '作者: ${detail.author ?? '未知'}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                          Row(
-                            children: [
-                              const Icon(LucideIcons.calendar, size: 16, color: Colors.cyanAccent),
-                              const SizedBox(width: 8),
-                              Text(
-                                '更新: ${detail.lastUpdate ?? '最近'}',
-                                style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary),
-                              ),
-                            ],
+                          const SizedBox(width: 12),
+                          Flexible(
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(LucideIcons.calendar, size: 16, color: Colors.cyanAccent),
+                                const SizedBox(width: 8),
+                                Flexible(
+                                  child: Text(
+                                    '更新: ${detail.lastUpdate ?? '最近'}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
                     ),
                     const SizedBox(height: 20),
-
-                    // Resume Progress Banner
-                    ref.watch(lastTrackingProvider(mediaId)).when(
-                      data: (track) {
-                        if (track == null) return const SizedBox();
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 20),
-                          decoration: BoxDecoration(
-                            color: AppTheme.primary.withOpacity(0.05),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: AppTheme.primary.withOpacity(0.2)),
-                          ),
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(12),
-                            onTap: () {
-                              if (mediaId.contains('manga')) {
-                                context.push('/manga-read/$pluginId/$mediaId/${track.chapterId}');
-                              } else if (mediaId.contains('novel')) {
-                                context.push('/novel-read/$pluginId/$mediaId/${track.chapterId}');
-                              } else {
-                                context.push('/play/$pluginId/$mediaId/${track.chapterId}');
-                              }
-                            },
-                            child: Padding(
-                              padding: const EdgeInsets.all(12),
-                              child: Row(
-                                children: [
-                                  const Icon(LucideIcons.history, color: AppTheme.primary, size: 20),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        const Text(
-                                          '上次看至',
-                                          style: TextStyle(color: AppTheme.textSecondary, fontSize: 10),
-                                        ),
-                                        Text(
-                                          track.chapterId ?? '第一章',
-                                          style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  const Icon(LucideIcons.chevronRight, color: AppTheme.primary, size: 16),
-                                ],
+                    ref.watch(trackingProvider(identity)).when(
+                          data: (track) {
+                            if (track == null || track.chapterId == null) return const SizedBox();
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 20),
+                              decoration: BoxDecoration(
+                                color: AppTheme.primary.withOpacity(0.05),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: AppTheme.primary.withOpacity(0.2)),
                               ),
-                            ),
-                          ),
-                        );
-                      },
-                      loading: () => const SizedBox(),
-                      error: (_, __) => const SizedBox(),
-                    ),
-
-                    // Description
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(12),
+                                onTap: () => _openChapter(context, ref, track.chapterId!),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(12),
+                                  child: Row(
+                                    children: [
+                                      const Icon(LucideIcons.history,
+                                          color: AppTheme.primary, size: 20),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            const Text(
+                                              '上次看至',
+                                              style: TextStyle(
+                                                  color: AppTheme.textSecondary, fontSize: 10),
+                                            ),
+                                            Text(
+                                              track.chapterTitle ?? '最近章节',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                            if (track.progress > 0)
+                                              Text(
+                                                '进度 ${(track.progress * 100).clamp(0, 100).toStringAsFixed(0)}%',
+                                                style: const TextStyle(
+                                                  color: AppTheme.textSecondary,
+                                                  fontSize: 10,
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                      ),
+                                      const Icon(LucideIcons.chevronRight,
+                                          color: AppTheme.primary, size: 16),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                          loading: () => const SizedBox(),
+                          error: (_, __) => const SizedBox(),
+                        ),
                     const Text(
                       '作品简介',
                       style: TextStyle(
@@ -286,8 +349,6 @@ class DetailScreen extends ConsumerWidget {
                 ),
               ),
             ),
-
-            // Chapters Grid list
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20.0),
@@ -299,7 +360,7 @@ class DetailScreen extends ConsumerWidget {
                         Icon(LucideIcons.circlePlay, color: AppTheme.primary, size: 20),
                         SizedBox(width: 8),
                         Text(
-                          '选集 / 章节播放',
+                          '选集 / 章节',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
@@ -315,7 +376,21 @@ class DetailScreen extends ConsumerWidget {
                           return const Center(
                             child: Padding(
                               padding: EdgeInsets.symmetric(vertical: 24),
-                              child: Text('无可用播放章节。', style: TextStyle(color: AppTheme.textSecondary)),
+                              child: Text('该来源未返回章节。',
+                                  style: TextStyle(color: AppTheme.textSecondary)),
+                            ),
+                          );
+                        }
+                        if (source?.supports(MediaCapability.video) ?? false) {
+                          return EpisodeSelector(
+                            lines: groupChapterLines(chapters),
+                            activeChapterId:
+                                ref.watch(trackingProvider(identity)).valueOrNull?.chapterId,
+                            onSelect: (chapter, line) => _openChapter(
+                              context,
+                              ref,
+                              chapter.id,
+                              groupId: line.id,
                             ),
                           );
                         }
@@ -323,15 +398,15 @@ class DetailScreen extends ConsumerWidget {
                           shrinkWrap: true,
                           physics: const NeverScrollableScrollPhysics(),
                           padding: EdgeInsets.zero,
-                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
+                          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: MediaQuery.sizeOf(context).width < 380 ? 1 : 2,
                             childAspectRatio: 2.8,
                             crossAxisSpacing: 12,
                             mainAxisSpacing: 12,
                           ),
                           itemCount: chapters.length,
                           itemBuilder: (context, index) {
-                            final ch = chapters[index];
+                            final Chapter ch = chapters[index];
                             return Container(
                               decoration: BoxDecoration(
                                 color: AppTheme.surface,
@@ -340,15 +415,7 @@ class DetailScreen extends ConsumerWidget {
                               ),
                               child: InkWell(
                                 borderRadius: BorderRadius.circular(12),
-                                onTap: () {
-                                  if (mediaId.contains('manga')) {
-                                    context.push('/manga-read/$pluginId/$mediaId/${ch.id}');
-                                  } else if (mediaId.contains('novel')) {
-                                    context.push('/novel-read/$pluginId/$mediaId/${ch.id}');
-                                  } else {
-                                    context.push('/play/$pluginId/$mediaId/${ch.id}');
-                                  }
-                                },
+                                onTap: () => _openChapter(context, ref, ch.id),
                                 child: Padding(
                                   padding: const EdgeInsets.symmetric(horizontal: 16.0),
                                   child: Row(
@@ -388,7 +455,9 @@ class DetailScreen extends ConsumerWidget {
                       error: (err, _) => Center(
                         child: Padding(
                           padding: const EdgeInsets.symmetric(vertical: 24),
-                          child: Text('加载章节失败: $err', style: const TextStyle(color: AppTheme.danger)),
+                          child: Text('加载章节失败: $err',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(color: AppTheme.danger)),
                         ),
                       ),
                     ),
@@ -408,11 +477,14 @@ class DetailScreen extends ConsumerWidget {
             children: [
               const Icon(LucideIcons.circleHelp, size: 48, color: AppTheme.danger),
               const SizedBox(height: 16),
-              const Text('加载作品失败', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+              const Text('加载作品失败',
+                  style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                child: Text('$err', textAlign: TextAlign.center, style: const TextStyle(color: AppTheme.textSecondary)),
+                child: Text('$err',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: AppTheme.textSecondary)),
               ),
               const SizedBox(height: 24),
               ElevatedButton(

@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { sourceIdentity, withSourceMetadata } from '../sources/identity';
 import { requireAuth } from '../auth/jwt';
 import { adaptKazumi, adaptLNReader, adaptVenera, adaptMangayomi } from '@titanhub/plugin-adapter';
 import { getPlugin, savePlugin } from '../db/db';
@@ -122,13 +123,17 @@ market.post('/install', requireAuth, async (c) => {
       name: adaptedPlugin.name,
       version: adaptedPlugin.version,
       types: adaptedPlugin.types,
-      code: adaptedPlugin.code,
+      code: withSourceMetadata(adaptedPlugin.code, {
+        ecosystem: sourceType,
+        lang: typeof body.lang === 'string' ? body.lang : typeof body.metadata?.lang === 'string' ? body.metadata.lang : undefined,
+        compatibility: sourceType === 'kazumi' ? 'compatible' : 'experimental',
+      }),
       isActive: existing?.isActive ?? true,
       isBuiltin: false,
     });
 
     const { code: _code, ...pluginInfo } = saved;
-    return c.json({ success: true, plugin: pluginInfo });
+    return c.json({ success: true, plugin: { ...pluginInfo, ...sourceIdentity(saved) } });
   } catch (err: any) {
     console.error('Failed to install plugin from market:', err);
     return c.json({ error: err.message || String(err) }, 500);

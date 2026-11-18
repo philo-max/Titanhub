@@ -1,4 +1,6 @@
+import type { Chapter } from '@titanhub/plugin-types';
 import { API_BASE } from './config';
+import { episodeLabel, episodeNumber, groupChapterLines, locateChapter } from './chapter-groups';
 
 export interface AlternativeSource {
   pluginId: string;
@@ -8,12 +10,15 @@ export interface AlternativeSource {
 
 export interface FallbackResult extends AlternativeSource {
   chapterId: string;
+  lineId?: string;
   videos: { quality: string; url: string }[];
 }
 
-interface ChapterLike {
-  id: string;
-  chapterNo?: number;
+export interface EpisodeKey {
+  episode?: number;
+  lineName?: string;
+  label: string;
+  single: boolean;
 }
 
 export const MAX_FALLBACK_ATTEMPTS = 5;
@@ -45,8 +50,22 @@ export async function findAlternativeSources(title: string, signal?: AbortSignal
     }));
 }
 
-export function pickEpisode(chapters: ChapterLike[], episodeNo: number, index: number): ChapterLike | undefined {
-  return chapters.find(chapter => chapter.chapterNo === episodeNo) || chapters[index];
+export function episodeKey(chapters: Chapter[], chapterId: string, lineId?: string): EpisodeKey | undefined {
+  const lines = groupChapterLines(chapters);
+  const location = locateChapter(lines, chapterId, lineId);
+  if (!location) return undefined;
+  const line = lines[location.line];
+  const chapter = line.chapters[location.index];
+  return { episode: episodeNumber(chapter), lineName: chapter.lineName, label: episodeLabel(chapter), single: chapters.length === 1 };
+}
+
+export function pickEpisode(chapters: Chapter[], key: EpisodeKey): Chapter | undefined {
+  const lines = groupChapterLines(chapters);
+  const ordered = [...lines.filter(line => key.lineName && line.name === key.lineName), ...lines.filter(line => !key.lineName || line.name !== key.lineName)];
+  const candidates = ordered.flatMap(line => line.chapters);
+  if (key.episode !== undefined) return candidates.find(chapter => episodeNumber(chapter) === key.episode);
+  const sameLabel = key.label ? candidates.find(chapter => episodeNumber(chapter) === undefined && episodeLabel(chapter) === key.label) : undefined;
+  return sameLabel ?? (key.single && chapters.length === 1 ? chapters[0] : undefined);
 }
 
 export interface FallbackOptions {
@@ -54,18 +73,17 @@ export interface FallbackOptions {
   pluginId: string;
   mediaId: string;
   chapterId: string;
+  lineId?: string;
   tried: string[];
   onAttempt?: (source: AlternativeSource, attempt: number, total: number) => void;
   signal?: AbortSignal;
 }
 
 export async function findPlayableAlternative(options: FallbackOptions): Promise<FallbackResult | null> {
-  const { title, pluginId, mediaId, chapterId, tried, onAttempt, signal } = options;
+  const { title, pluginId, mediaId, chapterId, lineId, tried, onAttempt, signal } = options;
   const current = await getJson(`/api/plugins/${pluginId}/chapters/${mediaId}`, signal).catch(() => null);
-  const currentChapters: ChapterLike[] = current?.chapters || [];
-  const index = currentChapters.findIndex(chapter => chapter.id === chapterId);
-  if (index < 0) return null;
-  const episodeNo = currentChapters[index].chapterNo ?? index + 1;
+  const key = episodeKey(current?.chapters || [], chapterId, lineId);
+  if (!key) return null;
 
   const skipped = new Set([pluginId, ...tried]);
   const alternatives = (await findAlternativeSources(title, signal).catch(() => []))
@@ -77,11 +95,11 @@ export async function findPlayableAlternative(options: FallbackOptions): Promise
     onAttempt?.(source, position + 1, alternatives.length);
     try {
       const listing = await getJson(`/api/plugins/${source.pluginId}/chapters/${source.mediaId}`, signal);
-      const chapter = pickEpisode(listing.chapters || [], episodeNo, index);
+      const chapter = pickEpisode(listing.chapters || [], key);
       if (!chapter) continue;
       const video = await getJson(`/api/plugins/${source.pluginId}/video/${chapter.id}`, signal);
       if (!video.error && Array.isArray(video.videos) && video.videos.length > 0) {
-        return { ...source, chapterId: chapter.id, videos: video.videos };
+        return { ...source, chapterId: chapter.id, lineId: chapter.lineId ?? chapter.lineName, videos: video.videos };
       }
     } catch {
       continue;

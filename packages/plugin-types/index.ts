@@ -19,11 +19,20 @@ export interface Chapter {
   title: string;
   url?: string;
   chapterNo?: number;
+  lineId?: string;
+  lineName?: string;
+  episodeNo?: number;
 }
 
 export interface VideoSource {
   quality: string;
   url: string;
+}
+
+export interface SourceInfo {
+  ecosystem: 'builtin' | 'custom' | 'kazumi' | 'venera' | 'mangayomi' | 'lnreader';
+  lang?: string;
+  compatibility?: 'compatible' | 'experimental' | 'unsupported';
 }
 
 export type MediaType = 'anime' | 'manga' | 'novel' | 'movie';

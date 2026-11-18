@@ -19,12 +19,13 @@ function detailHref(item: any): string | null {
 
 function SourceFailures({ sources }: { sources: AggregationSource[] }) {
   const failures = sources.filter(source => source.status === 'error' || source.status === 'timeout');
-  if (failures.length === 0) return null;
+  const unavailable = sources.filter(source => source.status === 'unsupported' || source.status === 'configuration_required');
+  if (failures.length === 0 && unavailable.length === 0) return null;
   return (
     <details className="text-sm text-textSecondary mb-4">
-      <summary className="cursor-pointer">{failures.length} 个来源加载失败</summary>
+      <summary className="cursor-pointer">{[failures.length ? `${failures.length} 个来源加载失败` : '', unavailable.length ? `${unavailable.length} 个来源待配置或暂不支持首页` : ''].filter(Boolean).join('；')}</summary>
       <ul className="mt-2 space-y-1">
-        {failures.map(source => <li key={source.id}>{source.name}：{source.message || (source.status === 'timeout' ? '请求超时' : '加载失败')}</li>)}
+        {[...failures, ...unavailable].map(source => <li key={source.id}>{source.displayName || source.name}：{source.message || (source.status === 'timeout' ? '请求超时' : '加载失败')}</li>)}
       </ul>
     </details>
   );

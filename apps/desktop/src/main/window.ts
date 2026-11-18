@@ -16,6 +16,7 @@ export function createMainWindow(loadUrl: string, backendUrl?: string): BrowserW
       contextIsolation: true,
       sandbox: true,
       webSecurity: true,
+      autoplayPolicy: 'no-user-gesture-required',
       additionalArguments: backendUrl ? [`--api-base=${backendUrl}`] : [],
     },
   });

@@ -23,9 +23,11 @@ import danmakuRoutes from './routes/danmaku';
 import danmakuEnhanced from './routes/danmaku-enhanced';
 import aggregate from './routes/aggregate';
 import market from './routes/market';
+import { sourceConfigurationMessage, sourceIdentity } from './sources/identity';
 import visual from './routes/visual';
 import { PlaywrightSniffer } from './plugins/sniffer';
 import { M3u8AdFilter } from './plugins/m3u8';
+import { MangaImageTokenStore, serveMangaImage, toClientImageUrls } from './plugins/manga-images';
 import { createWebDavMessageHandler } from './sync/ipc';
 
 initLocalSession(process.env);
@@ -38,6 +40,7 @@ if (isDesktopAuthMode() && process.send) {
 }
 
 const app = new Hono();
+const mangaImageTokens = new MangaImageTokenStore();
 
 // Enable CORS restricted to allowed origin in desktop/production, or all in open dev
 const allowedOrigin = process.env.ALLOWED_ORIGIN;
@@ -312,6 +315,8 @@ app.get('/api/plugins', async (c) => {
   return c.json({
     plugins: list.map(({ code, ...rest }) => ({
       ...rest,
+      ...sourceIdentity({ ...rest, code }),
+      configurationMessage: sourceConfigurationMessage({ ...rest, code }),
       // Detect info-only plugins that export providesVideo: false
       providesVideo: !/providesVideo\s*:\s*false/.test(code),
     })),
@@ -475,8 +480,17 @@ app.get('/api/plugins/:id/images/:chapterId', async (c) => {
   if (!result.success) {
     return c.json({ error: result.error }, 500);
   }
-  return c.json({ images: result.data });
+
+  const host = c.req.header('host') || 'localhost:3001';
+  const protocol = c.req.url.startsWith('https') ? 'https' : 'http';
+  try {
+    return c.json({ images: toClientImageUrls(result.data, `${protocol}://${host}`, mangaImageTokens) });
+  } catch (err: any) {
+    return c.json({ error: err.message || String(err) }, 500);
+  }
 });
+
+app.get('/api/manga-images/:token', (c) => serveMangaImage(c.req.param('token'), mangaImageTokens));
 
 // GET: Execute getContent inside sandbox (Novel)
 app.get('/api/plugins/:id/content/:chapterId', async (c) => {

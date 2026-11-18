@@ -5,6 +5,8 @@ import { sqliteGetMediaRanking, sqliteRecordMediaView } from '../db/sqlite/media
 import { mediaViews } from '../db/schema';
 import { desc, eq, sql } from 'drizzle-orm';
 import { PluginManager } from '../plugins/manager';
+import { sourceConfigurationMessage, sourceIdentity } from '../sources/identity';
+import { sourceFailure } from '../sources/failures';
 import type { AggregatedMediaItem, MediaType, HubMediaGroup, HubMediaSource } from '@titanhub/plugin-types';
 
 const aggregate = new Hono();
@@ -75,18 +77,11 @@ async function withTimeout<T>(promise: Promise<T>, pluginId: string): Promise<T>
   }
 }
 
-function failureMessage(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error);
-  if (/filename|wasm|QuickJS|runtime initialization/i.test(message)) return '来源引擎初始化失败，请升级客户端。';
-  if (/SecurityError|sandbox policy|Public DNS|Fake-IP/i.test(message)) return '来源地址未通过网络校验，请检查代理或 DNS 设置，或更换来源。';
-  if (/timed out|timeout/i.test(message)) return '来源请求超时，请稍后重试。';
-  if (/fetch|network|ECONN|ENOTFOUND/i.test(message)) return '来源网络请求失败，请检查网络或更换来源。';
-  return '来源返回错误或无法解析，请在来源管理中检查。';
-}
-
 async function exploreSources(plugins: DBPlugin[], type: MediaType) {
   return Promise.all(plugins.map(async (plugin) => {
-    const source = { id: plugin.id, name: plugin.name };
+    const source = { id: plugin.id, name: plugin.name, ...sourceIdentity(plugin) };
+    const configuration = sourceConfigurationMessage(plugin);
+    if (configuration) return { items: [] as AggregatedMediaItem[], source: { ...source, status: 'configuration_required', code: 'CONFIG_REQUIRED', itemCount: 0, message: configuration } };
     try {
       const result = await withTimeout(PluginManager.explore(plugin.id, type), plugin.id);
       if (!result.success) throw new Error(result.error || 'Source request failed');
@@ -97,10 +92,9 @@ async function exploreSources(plugins: DBPlugin[], type: MediaType) {
       const items: AggregatedMediaItem[] = result.data.map(item => ({ ...item, cover: typeof item.cover === 'string' ? item.cover : '', pluginId: plugin.id, pluginName: plugin.name, mediaType: type, providesVideo }));
       return { items, source: { ...source, status: items.length ? 'success' : 'empty', itemCount: items.length } };
     } catch (error) {
-      const message = failureMessage(error);
-      const timedOut = error instanceof Error && /timed out|timeout/i.test(error.message);
-      console.warn(`[aggregate/home] ${plugin.id}: ${message}`);
-      return { items: [] as AggregatedMediaItem[], source: { ...source, status: timedOut ? 'timeout' : 'error', itemCount: 0, message } };
+      const failure = sourceFailure(error);
+      console.warn(`[aggregate/home] ${plugin.id}: ${failure.code}`);
+      return { items: [] as AggregatedMediaItem[], source: { ...source, ...failure, itemCount: 0 } };
     }
   }));
 }
@@ -127,6 +121,7 @@ aggregate.get('/home', async (c) => {
     const total = allItems.length;
     const start = (page - 1) * pageSize;
     const items = allItems.slice(start, start + pageSize);
+    const unavailable = perPlugin.length > 0 && perPlugin.every(result => ['unsupported', 'configuration_required'].includes(result.source.status));
 
     return c.json({
       items,
@@ -136,8 +131,8 @@ aggregate.get('/home', async (c) => {
       hasMore: start + pageSize < total,
       sources: perPlugin.map(result => result.source),
       ...(total === 0 ? {
-        emptyReason: !eligible.length ? 'no_sources' : perPlugin.every(result => ['error', 'timeout'].includes(result.source.status)) ? 'sources_failed' : 'empty',
-        error: !eligible.length ? '当前分类没有已启用的来源，请先到来源管理启用来源。' : perPlugin.every(result => ['error', 'timeout'].includes(result.source.status)) ? '所有已启用来源均加载失败，请查看来源状态。' : '当前来源暂未返回内容，可重试或更换来源。',
+        emptyReason: !eligible.length ? 'no_sources' : unavailable ? 'sources_unavailable' : perPlugin.every(result => ['error', 'timeout'].includes(result.source.status)) ? 'sources_failed' : 'empty',
+        error: !eligible.length ? '当前分类没有已启用的来源，请先到来源管理启用来源。' : unavailable ? '当前来源需要配置或不支持首页推荐，请查看来源状态，也可以尝试搜索。' : perPlugin.every(result => ['error', 'timeout'].includes(result.source.status)) ? '所有已启用来源均加载失败，请查看来源状态。' : '当前来源暂未返回内容，可重试或更换来源。',
       } : {}),
     });
   } catch (err: any) {
@@ -165,6 +160,7 @@ aggregate.get('/search', async (c) => {
 
     const perPlugin = await Promise.all(
       eligible.map(async (plugin) => {
+        if (sourceConfigurationMessage(plugin)) return [];
         try {
           const result = await withTimeout(PluginManager.search(plugin.id, q), plugin.id);
           if (!result.success || !Array.isArray(result.data)) return [];

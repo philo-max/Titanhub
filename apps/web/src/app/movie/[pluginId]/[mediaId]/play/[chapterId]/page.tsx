@@ -1,8 +1,8 @@
 'use client';
 
-import React, { use, useEffect, useState, useRef } from 'react';
+import React, { use, useEffect, useMemo, useState, useRef } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   animatePlayPageEntrance,
   animatePlayPageExitNext,
@@ -16,6 +16,9 @@ import { findResumeLog } from '@/lib/resume-position';
 import { useAuthStore } from '@/stores/authStore';
 import { API_BASE } from '@/lib/config';
 import { playbackCache } from '@/lib/playbackCache';
+import type { Chapter } from '@titanhub/plugin-types';
+import EpisodeSelector from '@/components/EpisodeSelector';
+import { episodeLabel, episodeNumber, groupChapterLines, lineQuery, nextInLine } from '@/lib/chapter-groups';
 
 const VideoPlayer = dynamic(() => import('@/components/VideoPlayer'), {
   ssr: false,
@@ -33,12 +36,6 @@ interface Params {
   chapterId: string;
 }
 
-interface Chapter {
-  id: string;
-  title: string;
-  chapterNo?: number;
-}
-
 interface VideoSource {
   quality: string;
   url: string;
@@ -52,6 +49,7 @@ export default function MoviePlayPage({ params }: { params: Promise<Params> }) {
 function MoviePlayPageContent({ params }: { params: Promise<Params> }) {
   const { pluginId, mediaId, chapterId } = use(params);
   const router = useRouter();
+  const lineId = useSearchParams().get('lineId') ?? undefined;
   const pageRef = useRef<HTMLDivElement>(null);
 
   const [sources, setSources] = useState<VideoSource[]>([]);
@@ -168,20 +166,18 @@ function MoviePlayPageContent({ params }: { params: Promise<Params> }) {
     }
   }, [loading, resumeReady, sources]);
 
-  // Determine next episode
-  const getNextChapter = () => {
-    const currentIndex = chapters.findIndex((c) => c.id === chapterId);
-    if (currentIndex >= 0 && currentIndex < chapters.length - 1) {
-      return chapters[currentIndex + 1];
-    }
-    return null;
+  const lines = useMemo(() => groupChapterLines(chapters), [chapters]);
+  const nextChapter = nextInLine(lines, chapterId, lineId) ?? null;
+  const playHref = (chapter: Chapter) => {
+    const query = lineQuery(chapter);
+    return `/movie/${pluginId}/${mediaId}/play/${chapter.id}${query ? `?${query}` : ''}`;
   };
-  const nextChapter = getNextChapter();
+  const progressChapterNo = currentChapter ? episodeNumber(currentChapter) ?? currentChapter.chapterNo ?? 1 : 1;
 
   const handleNextChapterClick = () => {
     if (nextChapter) {
       animatePlayPageExitNext(pageRef.current, () => {
-        router.push(`/movie/${pluginId}/${mediaId}/play/${nextChapter.id}`);
+        router.push(playHref(nextChapter));
       });
     }
   };
@@ -257,7 +253,7 @@ function MoviePlayPageContent({ params }: { params: Promise<Params> }) {
             <Compass className="h-3 w-3 text-primary" />
             <span>沙箱插件: {pluginId}</span>
             <span>•</span>
-            <span>当前话: {currentChapter?.chapterNo ?? 1}</span>
+            <span>当前话: {currentChapter ? episodeNumber(currentChapter) ?? episodeLabel(currentChapter) : 1}</span>
           </p>
         </div>
 
@@ -283,7 +279,7 @@ function MoviePlayPageContent({ params }: { params: Promise<Params> }) {
                   mediaId,
                   pluginId,
                   mediaType: 'movie',
-                  chapterNo: currentChapter?.chapterNo ?? 1,
+                  chapterNo: progressChapterNo,
                   chapterId,
                   progress: duration > 0 ? time / duration : 0,
                   position: time,
@@ -301,24 +297,25 @@ function MoviePlayPageContent({ params }: { params: Promise<Params> }) {
             <span>快速选集</span>
           </h3>
 
-          <div className="flex flex-wrap gap-3">
-            {chapters.map((ch) => {
-              const isActive = ch.id === chapterId;
-              return (
-                <Link
-                  key={ch.id}
-                  href={`/movie/${pluginId}/${mediaId}/play/${ch.id}`}
-                  className={`text-xs px-4 py-2.5 rounded-xl border font-semibold transition-all duration-300 active:scale-95 ${
-                    isActive
-                      ? 'bg-primary border-primary text-white shadow-lg shadow-primary/25'
-                      : 'bg-surface border-border text-textSecondary hover:text-textPrimary hover:border-surfaceLight'
-                  }`}
-                >
-                  {ch.title}
-                </Link>
-              );
-            })}
-          </div>
+          <EpisodeSelector
+            lines={lines}
+            activeChapterId={chapterId}
+            activeLineId={lineId}
+            listClassName="flex flex-wrap gap-3"
+            renderEpisode={(ch, active) => (
+              <Link
+                key={ch.id}
+                href={playHref(ch)}
+                className={`text-xs px-4 py-2.5 rounded-xl border font-semibold transition-all duration-300 active:scale-95 ${
+                  active
+                    ? 'bg-primary border-primary text-white shadow-lg shadow-primary/25'
+                    : 'bg-surface border-border text-textSecondary hover:text-textPrimary hover:border-surfaceLight'
+                }`}
+              >
+                {episodeLabel(ch)}
+              </Link>
+            )}
+          />
         </section>
       </div>
     </div>

@@ -22,6 +22,8 @@ import { useLocalSessionStore } from '@/stores/localSessionStore';
 import { API_BASE } from '@/lib/config';
 import { fetchPluginMutation } from '@/lib/plugin-request';
 import { installMarketSources } from '@/lib/source-market';
+import { groupSourceVersions, sourceVersionLabel } from '@/lib/source-groups';
+import type { SourceInfo } from '@titanhub/plugin-types';
 
 interface PluginInfo {
   id: string;
@@ -31,6 +33,9 @@ interface PluginInfo {
   author?: string;
   isBuiltin?: boolean;
   isActive: boolean;
+  sourceInfo?: SourceInfo;
+  displayName?: string;
+  configurationMessage?: string;
 }
 
 interface MarketPlugin {
@@ -47,6 +52,15 @@ interface MarketPlugin {
   compatibility?: 'compatible' | 'experimental' | 'unsupported';
   limitation?: string;
   metadata?: Record<string, unknown>;
+}
+
+function SourceVersionGroups<T extends { id: string; name: string; type?: string }>({ sources, children }: { sources: T[]; children: (source: T) => React.ReactNode }) {
+  return <>{groupSourceVersions(sources).map(group => (
+    <details key={group.key} open={group.versions.length === 1} className="rounded-2xl border border-border bg-surface/20 p-3">
+      <summary className="cursor-pointer text-sm font-semibold text-textPrimary">{group.name} · {group.versions.length} 个版本</summary>
+      <div className="mt-3 space-y-3">{group.versions.map(source => <React.Fragment key={source.id}>{children(source)}</React.Fragment>)}</div>
+    </details>
+  ))}</>;
 }
 
 export default function PluginMarketPage() {
@@ -79,6 +93,7 @@ export default function PluginMarketPage() {
   const [selectedType, setSelectedType] = useState<string>('all');
   const [activeTab, setActiveTab] = useState<'market' | 'installed' | 'custom'>('market');
   const [includeUnsupported, setIncludeUnsupported] = useState(false);
+  const [languageScope, setLanguageScope] = useState('all');
   const [providerNotice, setProviderNotice] = useState('');
   const [batchProgress, setBatchProgress] = useState({ completed: 0, total: 0 });
 
@@ -248,7 +263,8 @@ export default function PluginMarketPage() {
       (selectedType === 'manga' && src.type === 'manga') ||
       (selectedType === 'novel' && src.type === 'novel');
 
-    return matchesSearch && matchesType && (includeUnsupported || src.installable !== false);
+    const matchesLanguage = languageScope === 'all' || !src.lang || src.lang === 'all' || (languageScope === 'zh' ? src.lang.startsWith('zh') : src.lang === languageScope);
+    return matchesSearch && matchesType && matchesLanguage && (includeUnsupported || src.installable !== false);
   });
 
   const installFiltered = async () => {
@@ -381,14 +397,23 @@ export default function PluginMarketPage() {
             {providerNotice && <p role="status" className="text-sm text-textSecondary">{providerNotice}</p>}
             <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
               <label className="flex items-center gap-2 text-textSecondary">
+                语言
+                <select aria-label="来源语言" value={languageScope} onChange={event => setLanguageScope(event.target.value)} className="rounded-lg bg-surface border border-border px-2 py-1">
+                  <option value="all">全部语言</option>
+                  <option value="zh">中文与未标语言</option>
+                  <option value="en">英语与未标语言</option>
+                </select>
+              </label>
+              <label className="flex items-center gap-2 text-textSecondary">
                 <input type="checkbox" checked={includeUnsupported} onChange={event => setIncludeUnsupported(event.target.checked)} />
                 显示待适配来源（{marketSources.filter(source => source.installable === false).length}）
               </label>
               <button onClick={installFiltered} disabled={!canManage || !!installingId || marketLoading}
                 className="rounded-xl border border-border px-4 py-2 text-primary disabled:opacity-50">
-                {installingId === 'batch' ? `安装中 ${batchProgress.completed}/${batchProgress.total}` : '安装或更新筛选中的可用来源'}
+                {installingId === 'batch' ? `安装中 ${batchProgress.completed}/${batchProgress.total}` : `安装或更新筛选中的 ${filteredMarket.filter(source => source.installable !== false).length} 个版本`}
               </button>
             </div>
+            <p className="text-xs text-textSecondary">同名来源按站点收拢，展开可选择不同生态或语言版本。实验兼容不代表已逐站验证阅读，请按需安装。</p>
 
             {marketLoading ? (
               <div className="flex flex-col items-center justify-center py-24 text-textSecondary gap-3 bg-surface/10 rounded-3xl border border-border/40 border-dashed">
@@ -401,7 +426,7 @@ export default function PluginMarketPage() {
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {filteredMarket.map((src) => {
+                <SourceVersionGroups sources={filteredMarket}>{(src) => {
                   const installedPlugin = plugins.find((p) => p.id === src.id);
                   const isInstalled = Boolean(installedPlugin);
                   const isInstalling = installingId === src.id;
@@ -458,6 +483,7 @@ export default function PluginMarketPage() {
                           {src.description || '暂无描述。'}
                         </p>
                         {src.limitation && <p className="mt-2 text-xs text-textSecondary">{src.limitation}</p>}
+                        {src.compatibility === 'experimental' && <p className="mt-2 text-xs text-amber-400">实验兼容</p>}
                       </div>
 
                       <div className="flex items-center justify-between border-t border-border/60 pt-4 mt-4 text-xs">
@@ -500,7 +526,7 @@ export default function PluginMarketPage() {
                       </div>
                     </div>
                   );
-                })}
+                }}</SourceVersionGroups>
               </div>
             )}
           </section>
@@ -523,7 +549,7 @@ export default function PluginMarketPage() {
               </div>
             ) : (
               <div className="space-y-3">
-                {plugins.map((plugin) => (
+                <SourceVersionGroups sources={plugins}>{(plugin) => (
                   <div
                     key={plugin.id}
                     className={`flex items-center justify-between gap-4 p-4 rounded-2xl bg-surface border transition-all ${plugin.isActive ? 'border-border' : 'border-border/40 opacity-60'}`}
@@ -540,6 +566,11 @@ export default function PluginMarketPage() {
                           </span>
                         )}
                       </div>
+                      <p className="text-xs text-textSecondary mt-1">
+                        {sourceVersionLabel({ ...plugin, sourceType: plugin.sourceInfo?.ecosystem || (plugin.isBuiltin ? 'builtin' : 'custom'), lang: plugin.sourceInfo?.lang })}
+                        {plugin.sourceInfo?.compatibility === 'experimental' ? ' · 实验兼容' : ''}
+                      </p>
+                      {plugin.configurationMessage && <p className="text-xs text-amber-400 mt-1">待配置：{plugin.configurationMessage}</p>}
                       <p className="text-xs text-textSecondary mt-1.5 truncate">
                         ID: <code className="font-mono bg-background/50 px-1 py-0.5 rounded">{plugin.id}</code> · 
                         支持类型: <span className="font-semibold text-textPrimary">{plugin.types.join(', ')}</span>
@@ -566,7 +597,7 @@ export default function PluginMarketPage() {
                       </div>
                     )}
                   </div>
-                ))}
+                )}</SourceVersionGroups>
               </div>
             )}
           </section>

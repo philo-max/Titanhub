@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { AggregatedMediaItem } from '@titanhub/plugin-types';
+import { AggregatedMediaItem, type SourceInfo } from '@titanhub/plugin-types';
 import { Category, mockMediaData } from '../lib/mockData';
 import { API_BASE } from '../lib/config';
 
@@ -15,7 +15,10 @@ function mockFallback(category: Category): AggregatedMediaItem[] {
 export interface AggregationSource {
   id: string;
   name: string;
-  status: 'success' | 'empty' | 'error' | 'timeout';
+  status: 'success' | 'empty' | 'error' | 'timeout' | 'unsupported' | 'configuration_required';
+  displayName?: string;
+  sourceInfo?: SourceInfo;
+  code?: string;
   itemCount: number;
   message?: string;
 }

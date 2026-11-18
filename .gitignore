@@ -45,8 +45,10 @@ release/
 dist-release/
 dist-package/
 build-out/
+build-out-*/
 
 # Temporary test logs and browser profiles
+.probe/
 *.log
 *profile/
 agent-browser.json
@@ -55,3 +57,7 @@ edge-profile-test/
 .desktop-data/
 *.db
 *.db.tmp*
+
+# Local sandbox/test debris
+.probe-sandbox-test.txt
+apps/desktop/test/nsis/.dbg-*/

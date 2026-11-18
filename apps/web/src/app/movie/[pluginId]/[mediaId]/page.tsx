@@ -1,6 +1,6 @@
 'use client';
 
-import React, { use, useEffect, useState, useRef } from 'react';
+import React, { use, useEffect, useMemo, useState, useRef } from 'react';
 import Link from 'next/link';
 import SmartImage from '@/components/SmartImage';
 import FavoriteButton from '@/components/FavoriteButton';
@@ -13,6 +13,10 @@ import {
 import { ArrowLeft, Play, Calendar, User, Compass, HelpCircle, Loader2 } from 'lucide-react';
 import { API_BASE, recordMediaView } from '@/lib/config';
 import { playbackCache } from '@/lib/playbackCache';
+import type { Chapter } from '@titanhub/plugin-types';
+import EpisodeSelector from '@/components/EpisodeSelector';
+import { episodeLabel, episodeNumber, groupChapterLines, lineQuery } from '@/lib/chapter-groups';
+import { useSyncStore } from '@/stores/syncStore';
 
 interface Params {
   pluginId: string;
@@ -30,12 +34,6 @@ interface MediaDetail {
   lastUpdate?: string;
 }
 
-interface Chapter {
-  id: string;
-  title: string;
-  chapterNo?: number;
-}
-
 export default function MovieDetailPage({ params }: { params: Promise<Params> }) {
   const { pluginId, mediaId } = use(params);
   const router = useRouter();
@@ -46,6 +44,9 @@ export default function MovieDetailPage({ params }: { params: Promise<Params> })
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const lines = useMemo(() => groupChapterLines(chapters), [chapters]);
+  const resumeChapterId = useSyncStore((state) => state.trackingList.find((log) => log.mediaType === 'movie'
+    && log.pluginId === pluginId && log.mediaId === mediaId)?.chapterId);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -109,12 +110,14 @@ export default function MovieDetailPage({ params }: { params: Promise<Params> })
     });
   };
 
-  const handleChapterClick = (chapterId: string) => {
+  const handleChapterClick = (chapter: Chapter) => {
+    const chapterId = chapter.id;
+    const query = lineQuery(chapter);
     if (prefetchTimersRef.current[chapterId]) {
       clearTimeout(prefetchTimersRef.current[chapterId]);
     }
     animateDetailPageExitPlay(pageRef.current, () => {
-      router.push(`/movie/${pluginId}/${mediaId}/play/${chapterId}`);
+      router.push(`/movie/${pluginId}/${mediaId}/play/${chapterId}${query ? `?${query}` : ''}`);
     });
   };
 
@@ -259,32 +262,40 @@ export default function MovieDetailPage({ params }: { params: Promise<Params> })
           <div className="flex items-center space-x-2 border-b border-borderSubtle pb-4 mb-6">
             <Play className="h-5 w-5 text-violet-400" />
             <h2 className="text-lg font-bold text-textPrimary">
-              选集 / 章节播放 ({chapters.length})
+              选集 / 章节播放
             </h2>
           </div>
 
           {chapters.length > 0 ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-              {chapters.map((ch, idx) => (
-                <button
-                  key={ch.id}
-                  onClick={() => handleChapterClick(ch.id)}
-                  onMouseEnter={() => handleChapterMouseEnter(ch.id)}
-                  onMouseLeave={() => handleChapterMouseLeave(ch.id)}
-                  className="animate-chapter-btn group relative overflow-hidden text-left bg-surface hover:bg-violet-950/20 border border-borderSubtle/80 hover:border-violet-500/40 rounded-xl p-4 cursor-pointer transition-all duration-300 active:scale-95"
-                >
-                  <div className="flex justify-between items-start">
-                    <span className="text-sm font-semibold text-textSecondary group-hover:text-violet-400 transition-colors line-clamp-1 pr-2">
-                      {ch.title}
-                    </span>
-                    <Play className="h-3 w-3 text-textTertiary opacity-0 group-hover:opacity-100 group-hover:text-violet-400 transform translate-x-1 group-hover:translate-x-0 transition-all duration-300 flex-shrink-0 mt-0.5" />
-                  </div>
-                  <span className="inline-block mt-2 text-[11px] font-bold px-2 py-0.5 rounded-md bg-violet-500/15 text-violet-300 border border-violet-500/20">
-                    第 {ch.chapterNo ?? idx + 1} 话
-                  </span>
-                </button>
-              ))}
-            </div>
+            <EpisodeSelector
+              lines={lines}
+              activeChapterId={resumeChapterId}
+              listClassName="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4"
+              renderEpisode={(ch, active) => {
+                const episode = episodeNumber(ch);
+                return (
+                  <button
+                    key={ch.id}
+                    onClick={() => handleChapterClick(ch)}
+                    onMouseEnter={() => handleChapterMouseEnter(ch.id)}
+                    onMouseLeave={() => handleChapterMouseLeave(ch.id)}
+                    className={`animate-chapter-btn group relative overflow-hidden text-left bg-surface hover:bg-violet-950/20 border hover:border-violet-500/40 rounded-xl p-4 cursor-pointer transition-all duration-300 active:scale-95 ${active ? 'border-violet-500/60' : 'border-borderSubtle/80'}`}
+                  >
+                    <div className="flex justify-between items-start">
+                      <span className="text-sm font-semibold text-textSecondary group-hover:text-violet-400 transition-colors line-clamp-1 pr-2">
+                        {episodeLabel(ch)}
+                      </span>
+                      <Play className="h-3 w-3 text-textTertiary opacity-0 group-hover:opacity-100 group-hover:text-violet-400 transform translate-x-1 group-hover:translate-x-0 transition-all duration-300 flex-shrink-0 mt-0.5" />
+                    </div>
+                    {episode !== undefined && (
+                      <span className="inline-block mt-2 text-[11px] font-bold px-2 py-0.5 rounded-md bg-violet-500/15 text-violet-300 border border-violet-500/20">
+                        第 {episode} 话
+                      </span>
+                    )}
+                  </button>
+                );
+              }}
+            />
           ) : (
             <div className="text-center py-12 text-textTertiary text-sm">
               该插件源未解析出任何章节内容。

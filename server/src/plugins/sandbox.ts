@@ -122,11 +122,28 @@ const DEFAULT_RATE_LIMIT_MS = 100; // Default minimum interval between requests 
 const MAX_FETCH_RETRIES = 2; // Max retries on 429/503
 const RETRY_BASE_DELAY_MS = 500; // Base delay for exponential backoff
 const MAX_REDIRECTS = 5; // Max redirect chain length
+const DEFAULT_CALL_WALL_TIME_MS = 60000;
+const DEFAULT_MAX_FETCHES_PER_CALL = 300;
+
+export interface SandboxCallLimits {
+  wallTimeMs?: number;
+  maxFetches?: number;
+}
+
+function abortableDelay(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) return reject(signal.reason);
+    const onAbort = () => { clearTimeout(timer); reject(signal!.reason); };
+    const timer = setTimeout(() => { signal?.removeEventListener('abort', onAbort); resolve(); }, ms);
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
 
 // ─── Simple TTL response cache for GET requests ───
 interface CacheEntry {
   status: number;
   body: string;
+  headers: Record<string, string>;
   expiresAt: number;
 }
 const responseCache = new Map<string, CacheEntry>();
@@ -143,13 +160,13 @@ function getCachedResponse(url: string): CacheEntry | null {
   return entry;
 }
 
-function setCachedResponse(url: string, status: number, body: string, ttlMs: number = RESPONSE_CACHE_TTL_MS): void {
+function setCachedResponse(url: string, status: number, body: string, headers: Record<string, string>, ttlMs: number = RESPONSE_CACHE_TTL_MS): void {
   // Evict oldest entries if cache is full (simple LRU-ish)
   if (responseCache.size >= RESPONSE_CACHE_MAX_ENTRIES) {
     const oldestKey = responseCache.keys().next().value;
     if (oldestKey) responseCache.delete(oldestKey);
   }
-  responseCache.set(url, { status, body, expiresAt: Date.now() + ttlMs });
+  responseCache.set(url, { status, body, headers, expiresAt: Date.now() + ttlMs });
 }
 
 /**
@@ -159,15 +176,21 @@ function setCachedResponse(url: string, status: number, body: string, ttlMs: num
 async function hardenedFetch(
   url: string,
   options: any,
-  pluginId: string
+  pluginId: string,
+  signal?: AbortSignal
 ): Promise<{ status: number; body: string; headers: Record<string, string> }> {
+  signal?.throwIfAborted();
+  const requestHeaders = { ...(options.headers || {}) };
+  if (!Object.keys(requestHeaders).some(name => name.toLowerCase() === 'user-agent')) requestHeaders['User-Agent'] = 'Titanhub/1.0';
+  options = { ...options, headers: requestHeaders };
   const method = (options.method || 'GET').toUpperCase();
+  const cacheKey = JSON.stringify([pluginId, url, options.headers || {}, getCookiesForRequest(pluginId, url)]);
 
   // Check cache for GET requests without explicit cache-busting headers
   if (method === 'GET') {
-    const cached = getCachedResponse(url);
+    const cached = getCachedResponse(cacheKey);
     if (cached) {
-      return { status: cached.status, body: cached.body, headers: {} };
+      return { status: cached.status, body: cached.body, headers: cached.headers };
     }
   }
 
@@ -178,6 +201,7 @@ async function hardenedFetch(
   while (redirectCount <= MAX_REDIRECTS) {
     // Validate every URL in the chain (prevents SSRF via redirect to internal IPs)
     const isSafe = await isSafeUrl(currentUrl, { allowPinnedFakeIp: true });
+    signal?.throwIfAborted();
     if (!isSafe) {
       throw new Error(`SecurityError: URL '${currentUrl}' is blocked by sandbox policy.`);
     }
@@ -193,9 +217,11 @@ async function hardenedFetch(
       domainLastRequestTime.set(hostname, targetTime);
       const delay = targetTime - now;
       if (delay > 0) {
-        await new Promise((resolve) => setTimeout(resolve, delay));
+        await abortableDelay(delay, signal);
       }
-    } catch {}
+    } catch (err) {
+      if (signal?.aborted) throw err;
+    }
 
     // Attach cookies from the per-plugin cookie jar
     const cookieStr = getCookiesForRequest(pluginId, currentUrl);
@@ -215,6 +241,7 @@ async function hardenedFetch(
     let res: Response | null = null;
 
     for (let attempt = 0; attempt <= MAX_FETCH_RETRIES; attempt++) {
+      signal?.throwIfAborted();
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
@@ -223,7 +250,7 @@ async function hardenedFetch(
           ...options,
           method,
           redirect: 'manual', // Manually follow redirects to validate each hop
-          signal: controller.signal,
+          signal: signal ? AbortSignal.any([controller.signal, signal]) : controller.signal,
         };
 
         // Use undici ProxyAgent if PROXY_URL is set
@@ -261,17 +288,15 @@ async function hardenedFetch(
           const delay = retryAfter > 0
             ? retryAfter * 1000
             : RETRY_BASE_DELAY_MS * Math.pow(2, attempt);
-          await new Promise((resolve) => setTimeout(resolve, delay));
+          await abortableDelay(delay, signal);
           continue;
         }
         break; // Success or non-retryable status
       } catch (err: any) {
-        if (err instanceof PinnedNetworkError) throw err;
+        if (err instanceof PinnedNetworkError || signal?.aborted) throw err;
         lastError = err;
         if (attempt < MAX_FETCH_RETRIES) {
-          await new Promise((resolve) =>
-            setTimeout(resolve, RETRY_BASE_DELAY_MS * Math.pow(2, attempt))
-          );
+          await abortableDelay(RETRY_BASE_DELAY_MS * Math.pow(2, attempt), signal);
           continue;
         }
         throw new Error(`Fetch failed after ${MAX_FETCH_RETRIES + 1} attempts: ${err.message}`);
@@ -348,7 +373,7 @@ async function hardenedFetch(
 
     // Cache successful GET responses
     if (method === 'GET' && res.status >= 200 && res.status < 300) {
-      setCachedResponse(url, result.status, result.body);
+      setCachedResponse(cacheKey, result.status, result.body, result.headers);
     }
 
     return result;
@@ -619,6 +644,10 @@ export class PluginSandbox {
       }
     }
     // Pool is full, clean up context completely
+    this.discardContext(pooled);
+  }
+
+  private static discardContext(pooled: PooledContext) {
     for (const h of pooled.baseHandles) {
       try {
         h.dispose();
@@ -943,8 +972,22 @@ export class PluginSandbox {
   async runMethod<T>(
     methodName: string,
     args: any[],
-    timeoutMs: number = 5000
+    timeoutMs: number = 5000,
+    limits: SandboxCallLimits = {}
   ): Promise<SandboxResult<T>> {
+    const wallTimeMs = limits.wallTimeMs ?? Math.max(DEFAULT_CALL_WALL_TIME_MS, timeoutMs * 2);
+    const maxFetches = limits.maxFetches ?? DEFAULT_MAX_FETCHES_PER_CALL;
+    const callController = new AbortController();
+    let limitReached = false;
+    const stopCall = (message: string) => {
+      if (callController.signal.aborted) return;
+      limitReached = true;
+      callController.abort(new Error(message));
+    };
+    const callStopped = new Promise<void>((resolve) => callController.signal.addEventListener('abort', () => resolve(), { once: true }));
+    const wallTimer = setTimeout(() => stopCall(`Sandbox call timed out after ${wallTimeMs}ms wall-clock limit.`), wallTimeMs);
+    const hostTasks: Promise<any>[] = [];
+    let fetchCount = 0;
     let pooled: PooledContext | null = null;
     const tempHandles: any[] = [];
     const trackTemp = <U extends { dispose(): void }>(handle: U): U => {
@@ -960,12 +1003,20 @@ export class PluginSandbox {
       const vm = pooled.vm;
 
       // Timeout Interrupt Handler
-      const startTime = Date.now();
+      let executionMs = 0;
+      let executionStart: number | undefined;
+      const execute = <U>(operation: () => U): U => {
+        executionStart = performance.now();
+        try { return operation(); }
+        finally { executionMs += performance.now() - executionStart; executionStart = undefined; }
+      };
       vm.runtime.setInterruptHandler(() => {
-        if (Date.now() - startTime > timeoutMs) {
+        if (callController.signal.aborted) return true;
+        if (executionMs + (executionStart === undefined ? 0 : performance.now() - executionStart) > timeoutMs) {
           console.warn(
             `[Sandbox Timeout] Method ${methodName} exceeded ${timeoutMs}ms and was terminated.`
           );
+          stopCall(`Sandbox execution budget of ${timeoutMs}ms exceeded; script interrupted.`);
           return true; // Interrupts execution
         }
         return false;
@@ -976,34 +1027,25 @@ export class PluginSandbox {
           const url = vm.dump(urlVal) as string;
           const options = optionsVal ? vm.dump(optionsVal) : {};
           const deferred = trackTemp(vm.newPromise());
+          if (++fetchCount > maxFetches) stopCall(`Sandbox call exceeded fetch limit of ${maxFetches} requests.`);
 
           const promise = (async () => {
             try {
-              const result = await hardenedFetch(url, options, this.pluginId);
+              const result = await hardenedFetch(url, options, this.pluginId, callController.signal);
 
               // Construct simulated fetch response object in QuickJS
-              const resObj = trackTemp(vm.newObject());
-
-              const statusHandle = trackTemp(vm.newNumber(result.status));
-              vm.setProp(resObj, 'status', statusHandle);
-
-              const textFunc = trackTemp(
-                vm.newFunction('text', () => {
-                  return vm.newString(result.body);
-                })
-              );
-              const jsonFunc = trackTemp(
-                vm.newFunction('json', () => {
-                  try {
-                    return vm.newString(JSON.stringify(JSON.parse(result.body)));
-                  } catch {
-                    return vm.newString('{}');
-                  }
-                })
-              );
-
-              vm.setProp(resObj, 'text', textFunc);
-              vm.setProp(resObj, 'json', jsonFunc);
+              const responseResult = execute(() => vm.evalCode(`((body, status, values) => ({
+                status, ok: status >= 200 && status < 300,
+                headers: {
+                  get: name => values[String(name).toLowerCase()] ?? null,
+                  has: name => String(name).toLowerCase() in values,
+                  forEach: fn => Object.entries(values).forEach(([key, value]) => fn(value, key)),
+                  entries: () => Object.entries(values)[Symbol.iterator](),
+                },
+                text: async () => body,
+                json: async () => JSON.parse(body),
+              }))(${JSON.stringify(result.body)}, ${result.status}, ${JSON.stringify(result.headers)})`));
+              const resObj = trackTemp(vm.unwrapResult(responseResult));
 
               deferred.resolve(resObj);
             } catch (err: any) {
@@ -1013,6 +1055,7 @@ export class PluginSandbox {
           })();
 
           activePromises.push(promise);
+          hostTasks.push(promise);
           return deferred.handle;
         })
       );
@@ -1028,7 +1071,9 @@ export class PluginSandbox {
 
           const promise = (async () => {
             try {
+              callController.signal.throwIfAborted();
               const isSafe = await isSafeUrl(url, { allowPinnedFakeIp: true });
+              callController.signal.throwIfAborted();
               if (!isSafe) {
                 const errStr = trackTemp(
                   vm.newString(
@@ -1048,6 +1093,7 @@ export class PluginSandbox {
           })();
 
           activePromises.push(promise);
+          hostTasks.push(promise);
           return deferred.handle;
         })
       );
@@ -1082,7 +1128,7 @@ export class PluginSandbox {
         })()
       `;
 
-      const execResult = vm.evalCode(executionExpr);
+      const execResult = execute(() => vm.evalCode(executionExpr));
       if (execResult.error) {
         const errorDump = vm.dump(execResult.error);
         execResult.error.dispose();
@@ -1098,16 +1144,25 @@ export class PluginSandbox {
       // 4. Handle Promise resolution using an active event loop driver
       // Since it is wrapped in an async IIFE, the returned value is always a promise handle
       const resolvedPromise = vm.resolvePromise(execResult.value);
+      let mainSettled = false;
+      const mainDone = resolvedPromise.then(() => { mainSettled = true; });
 
       // Advanced event loop driver for nested async tasks
       let hasPending = true;
-      while (hasPending) {
-        vm.runtime.executePendingJobs();
+      while (hasPending && !mainSettled) {
+        callController.signal.throwIfAborted();
+        const jobs = execute(() => vm.runtime.executePendingJobs());
+        if (jobs.error) {
+          const error = vm.dump(jobs.error);
+          jobs.error.dispose();
+          throw new Error(error?.message || String(error));
+        }
+        jobs.dispose();
 
         if (activePromises.length > 0) {
           const batch = [...activePromises];
           activePromises.length = 0;
-          await Promise.allSettled(batch);
+          await Promise.race([Promise.allSettled(batch), mainDone, callStopped]);
           continue;
         }
 
@@ -1117,7 +1172,8 @@ export class PluginSandbox {
         }
       }
 
-      const resolvedResult = await resolvedPromise;
+      const resolvedResult = await Promise.race([resolvedPromise, callStopped]);
+      if (!resolvedResult) throw callController.signal.reason;
 
       if (resolvedResult.error) {
         const errorDump = vm.dump(resolvedResult.error);
@@ -1153,10 +1209,10 @@ export class PluginSandbox {
         error: e.message || String(e),
       };
     } finally {
+      clearTimeout(wallTimer);
+      if (!callController.signal.aborted) callController.abort(new Error('Sandbox call finished.'));
       // Ensure all outstanding host fetch promises are settled before disposing the context
-      if (activePromises.length > 0) {
-        await Promise.allSettled(activePromises);
-      }
+      await Promise.allSettled(hostTasks);
 
       // Dispose of all temporary handles safely
       for (const h of tempHandles) {
@@ -1179,7 +1235,8 @@ export class PluginSandbox {
         vm.runtime.setInterruptHandler(undefined as any);
 
         // Return the context to the pool
-        PluginSandbox.releaseContext(this.pluginId, pooled);
+        if (limitReached || vm.runtime.hasPendingJob()) PluginSandbox.discardContext(pooled);
+        else PluginSandbox.releaseContext(this.pluginId, pooled);
       }
     }
   }

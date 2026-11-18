@@ -16,6 +16,7 @@ import { useSyncStore, type TrackingLog } from '@/stores/syncStore';
 import { findResumeLog, mangaResumePage } from '@/lib/resume-position';
 import { API_BASE } from '@/lib/config';
 import { playbackCache } from '@/lib/playbackCache';
+import { canRetryMangaImage, mangaImageAttemptKey, MAX_MANGA_IMAGE_RETRIES } from '@/lib/manga-image-retry';
 
 interface Params {
   pluginId: string;
@@ -81,14 +82,15 @@ function LazyMangaImage({
   // For horizontal mode, visibility is determined by index adjacency
   const shouldLoad = mode === 'vertical' ? inView : isCurrentOrAdjacent;
 
+  const canRetry = canRetryMangaImage(retryCount);
+
   const handleReload = () => {
+    if (!canRetry) return;
     setStatus('loading');
     setRetryCount((prev) => prev + 1);
   };
 
-  const imageSrc = shouldLoad
-    ? (retryCount > 0 ? `${src}?retry=${retryCount}` : src)
-    : '';
+  const imageSrc = shouldLoad ? src : '';
 
   return (
     <div
@@ -108,16 +110,21 @@ function LazyMangaImage({
           {status === 'failed' && (
             <div className="absolute inset-0 flex flex-col items-center justify-center text-rose-400 bg-rose-950/30 backdrop-blur-sm p-4 z-10 text-center">
               <span className="text-sm font-semibold mb-3">第 {pageNum} 页加载失败</span>
-              <button
-                onClick={handleReload}
-                className="px-4 py-2 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-300 text-xs font-bold hover:bg-rose-500/30 active:scale-95 transition-all cursor-pointer"
-              >
-                重新加载
-              </button>
+              {canRetry ? (
+                <button
+                  onClick={handleReload}
+                  className="px-4 py-2 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-300 text-xs font-bold hover:bg-rose-500/30 active:scale-95 transition-all cursor-pointer"
+                >
+                  重新加载
+                </button>
+              ) : (
+                <span className="text-xs text-rose-300">已重试 {MAX_MANGA_IMAGE_RETRIES} 次仍失败，请稍后重新打开本章节</span>
+              )}
             </div>
           )}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
+            key={mangaImageAttemptKey(src, retryCount)}
             src={imageSrc}
             alt={`Page ${pageNum}`}
             className={`max-w-full max-h-full object-contain block transition-opacity duration-300 ${

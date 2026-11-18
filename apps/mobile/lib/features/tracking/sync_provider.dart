@@ -1,20 +1,19 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
+import 'package:drift/drift.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../core/identity/media_identity.dart';
 import '../../core/network/api_client.dart';
 import '../../core/storage/app_database.dart';
-import 'package:drift/drift.dart';
 
-// Global Drift Database Provider
 final databaseProvider = Provider<AppDatabase>((ref) {
   final db = AppDatabase();
   ref.onDispose(() => db.close());
   return db;
 });
 
-// Authentication Token State Provider (stores the logged-in User ID)
 final authTokenProvider = StateProvider<String?>((ref) => null);
 
-// Synchronization Service Provider
 final syncServiceProvider = Provider<SyncService>((ref) {
   final db = ref.watch(databaseProvider);
   final dio = ref.watch(apiClientProvider);
@@ -22,14 +21,23 @@ final syncServiceProvider = Provider<SyncService>((ref) {
   return SyncService(db, dio, token);
 });
 
+final favoriteStatusProvider = StreamProvider.family<bool, MediaIdentity>((ref, identity) {
+  final db = ref.watch(databaseProvider);
+  return db.watchFavorite(identity).map((row) => row != null);
+});
+
+final trackingProvider = StreamProvider.family<LocalTrackingData?, MediaIdentity>((ref, identity) {
+  final db = ref.watch(databaseProvider);
+  return db.watchTracking(identity);
+});
+
 class SyncService {
+  SyncService(this._db, this._dio, this._authToken);
+
   final AppDatabase _db;
   final Dio _dio;
   final String? _authToken;
 
-  SyncService(this._db, this._dio, this._authToken);
-
-  // Register a new user account
   Future<bool> register(String username, String password) async {
     try {
       final response = await _dio.post('/api/auth/register', data: {
@@ -43,7 +51,6 @@ class SyncService {
     return false;
   }
 
-  // Log in and store the authentication token
   Future<bool> login(WidgetRef ref, String username, String password) async {
     try {
       final response = await _dio.post('/api/auth/login', data: {
@@ -59,31 +66,34 @@ class SyncService {
     return false;
   }
 
-  // Push local progress tracking to Hono server (Last-Write-Wins)
   Future<void> pushTracking() async {
-    if (_authToken == null) return;
+    final token = _authToken;
+    if (token == null) return;
 
     try {
       final localLogs = await _db.getAllTracking();
       if (localLogs.isEmpty) return;
 
-      final payload = localLogs.map((log) => {
-        'mediaId': log.mediaId,
-        'pluginId': log.pluginId,
-        'mediaType': log.mediaType,
-        'chapterNo': log.chapterNo,
-        'chapterId': log.chapterId,
-        'progress': log.progress,
-        'status': log.status,
-        'updatedAt': log.updatedAt.toIso8601String(),
-      }).toList();
+      final payload = localLogs
+          .map((log) => {
+                'id': log.id,
+                'mediaId': log.mediaId,
+                'pluginId': log.pluginId,
+                'mediaType': log.mediaType,
+                'chapterNo': log.chapterNo,
+                'chapterId': log.chapterId,
+                'chapterTitle': log.chapterTitle,
+                'progress': log.progress,
+                'position': log.position,
+                'status': log.status,
+                'updatedAt': log.updatedAt.toIso8601String(),
+              })
+          .toList();
 
       final response = await _dio.post(
         '/api/sync/tracking',
         data: {'tracking': payload},
-        options: Options(headers: {
-          'Authorization': 'Bearer $_authToken',
-        }),
+        options: Options(headers: {'Authorization': 'Bearer $token'}),
       );
 
       if (response.data['success'] == true) {
@@ -93,16 +103,14 @@ class SyncService {
     } catch (_) {}
   }
 
-  // Pull remote progress tracking from server and merge locally
   Future<void> pullTracking() async {
-    if (_authToken == null) return;
+    final token = _authToken;
+    if (token == null) return;
 
     try {
       final response = await _dio.get(
         '/api/sync/tracking',
-        options: Options(headers: {
-          'Authorization': 'Bearer $_authToken',
-        }),
+        options: Options(headers: {'Authorization': 'Bearer $token'}),
       );
 
       if (response.data['success'] == true) {
@@ -112,62 +120,94 @@ class SyncService {
     } catch (_) {}
   }
 
-  // Helper method to merge list of tracking logs into local SQLite
   Future<void> _mergeTrackingIntoLocal(List<dynamic> remoteList) async {
-    for (var item in remoteList) {
+    for (final item in remoteList) {
+      if (item is! Map) continue;
       final map = Map<String, dynamic>.from(item);
-      final mediaId = map['mediaId'] as String;
-      
-      final local = await _db.getTracking(mediaId);
-      final remoteTime = DateTime.parse(map['updatedAt'] as String);
+      final identity = MediaIdentity(
+        pluginId: (map['pluginId'] ?? '').toString(),
+        mediaType: (map['mediaType'] ?? '').toString(),
+        mediaId: (map['mediaId'] ?? '').toString(),
+      );
+      if (identity.mediaId.isEmpty) continue;
 
-      if (local == null || remoteTime.isAfter(local.updatedAt)) {
-        await _db.saveTracking(LocalTrackingCompanion(
-          id: Value(map['id'] as String),
-          mediaId: Value(mediaId),
-          pluginId: Value(map['pluginId'] as String),
-          mediaType: Value(map['mediaType'] as String),
-          chapterNo: Value(map['chapterNo'] as int),
-          chapterId: Value(map['chapterId'] as String?),
-          progress: Value((map['progress'] as num).toDouble()),
-          status: Value(map['status'] as String),
-          updatedAt: Value(remoteTime),
-        ));
-      }
+      final remoteTime = DateTime.tryParse('${map['updatedAt']}');
+      if (remoteTime == null) continue;
+
+      final local = await _db.getTracking(identity);
+      if (local != null && !remoteTime.isAfter(local.updatedAt)) continue;
+
+      await _db.saveTracking(LocalTrackingCompanion(
+        id: Value((map['id'] ?? identity.key).toString()),
+        pluginId: Value(identity.pluginId),
+        mediaType: Value(identity.mediaType),
+        mediaId: Value(identity.mediaId),
+        chapterNo: Value((map['chapterNo'] as num?)?.toInt() ?? 0),
+        chapterId: Value(map['chapterId'] as String?),
+        chapterTitle: Value(map['chapterTitle'] as String?),
+        progress: Value((map['progress'] as num?)?.toDouble() ?? 0.0),
+        position: Value((map['position'] as num?)?.toInt()),
+        status: Value((map['status'] ?? 'watching').toString()),
+        updatedAt: Value(remoteTime),
+      ));
     }
   }
 
-  // Save progress locally and optionally push online
   Future<void> saveProgress({
-    required String mediaId,
     required String pluginId,
     required String mediaType,
-    required int chapterNo,
+    required String mediaId,
+    int chapterNo = 0,
     String? chapterId,
+    String? chapterTitle,
     required double progress,
-    required String status,
+    int? position,
+    String status = 'watching',
   }) async {
-    final now = DateTime.now();
-    
-    // Check if we already have a record to preserve the primary key UUID
-    final existing = await _db.getTracking(mediaId);
-    final String trackingId = existing?.id ?? now.millisecondsSinceEpoch.toString();
+    final identity = MediaIdentity(
+      pluginId: pluginId,
+      mediaType: mediaType,
+      mediaId: mediaId,
+    );
+    final existing = await _db.getTracking(identity);
 
     await _db.saveTracking(LocalTrackingCompanion(
-      id: Value(trackingId),
-      mediaId: Value(mediaId),
+      id: Value(existing?.id ?? identity.key),
       pluginId: Value(pluginId),
       mediaType: Value(mediaType),
+      mediaId: Value(mediaId),
       chapterNo: Value(chapterNo),
       chapterId: Value(chapterId),
-      progress: Value(progress),
+      chapterTitle: Value(chapterTitle),
+      progress: Value(progress.clamp(0.0, 1.0)),
+      position: Value(position),
       status: Value(status),
-      updatedAt: Value(now),
+      updatedAt: Value(DateTime.now()),
     ));
 
-    // Async push if signed in
     if (_authToken != null) {
       pushTracking();
+    }
+  }
+
+  Future<LocalTrackingData?> loadProgress(MediaIdentity identity) {
+    return _db.getTracking(identity);
+  }
+
+  Future<bool> isFavorite(MediaIdentity identity) async {
+    return (await _db.getFavorite(identity)) != null;
+  }
+
+  Future<void> setFavorite(MediaIdentity identity, bool favorite) async {
+    if (favorite) {
+      await _db.saveFavorite(LocalFavoritesCompanion(
+        id: Value(identity.key),
+        pluginId: Value(identity.pluginId),
+        mediaType: Value(identity.mediaType),
+        mediaId: Value(identity.mediaId),
+      ));
+    } else {
+      await _db.deleteFavorite(identity);
     }
   }
 }

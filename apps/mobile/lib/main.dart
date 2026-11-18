@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
 import 'core/router/app_router.dart';
+import 'core/sources/kazumi/kazumi_providers.dart';
+import 'core/sources/venera/venera_providers.dart';
 import 'core/theme/app_theme.dart';
 
 void main() {
@@ -24,6 +26,8 @@ class TitanhubApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(routerProvider);
+    ref.watch(kazumiBootstrapProvider);
+    ref.watch(veneraBootstrapProvider);
 
     return MaterialApp.router(
       title: 'Titanhub',

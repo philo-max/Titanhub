@@ -20,6 +20,7 @@ import { API_BASE } from '@/lib/config';
 import { videoResumeTime } from '@/lib/resume-position';
 import { bindProgressFlush } from '@/lib/progress-flush';
 import { bindVideoKeyboard } from '@/lib/video-keyboard';
+import { createStartGate, intentAfterQualitySwitch, startPlayback } from '@/lib/autoplay';
 
 const KEYBOARD_SEEK_SECONDS = 5;
 const KEYBOARD_VOLUME_STEP = 0.05;
@@ -84,7 +85,9 @@ export default function VideoPlayer({
 
   // Seamless quality switching memory
   const seekOnLoadRef = useRef<number | null>(null);
-  const playOnLoadRef = useRef<boolean>(false);
+  const startGateRef = useRef(createStartGate());
+  const startAttemptRef = useRef(0);
+  const [autoplayBlocked, setAutoplayBlocked] = useState(false);
   const restoredRef = useRef(false);
   const initialRestoredRef = useRef(false);
   const progressCallbackRef = useRef(onProgress);
@@ -106,7 +109,8 @@ export default function VideoPlayer({
 
   useEffect(() => {
     seekOnLoadRef.current = null;
-    playOnLoadRef.current = false;
+    startGateRef.current.arm('autoplay');
+    setAutoplayBlocked(false);
     restoredRef.current = false;
     initialRestoredRef.current = false;
   }, [pluginId, mediaId, chapterId]);
@@ -130,6 +134,7 @@ export default function VideoPlayer({
 
     let hls: Hls | null = null;
     const src = activeSource.url;
+    const startAttempts = startAttemptRef;
 
     restoredRef.current = false;
     setIsPlaying(false);
@@ -153,14 +158,14 @@ export default function VideoPlayer({
       restoredRef.current = true;
       setCurrentTime(video.currentTime);
       setDuration(video.duration);
-      // Restore playback state
-      if (playOnLoadRef.current) {
-        video.play().catch(() => {});
-        setIsPlaying(true);
-        playOnLoadRef.current = false;
-      }
       // Re-apply playback speed
       video.playbackRate = playbackSpeedRef.current;
+      const attempt = ++startAttemptRef.current;
+      void startPlayback(video, startGateRef.current.take(), () => attempt === startAttemptRef.current).then((result) => {
+        if (result.status !== 'blocked' && result.status !== 'failed') return;
+        console.warn('[VideoPlayer] Playback start failed:', result.error);
+        if (result.status === 'blocked') setAutoplayBlocked(true);
+      });
     };
 
     video.addEventListener('loadedmetadata', setupRestoredState);
@@ -206,6 +211,7 @@ export default function VideoPlayer({
     }
 
     return () => {
+      startAttempts.current++;
       video.removeEventListener('loadedmetadata', setupRestoredState);
       video.removeEventListener('durationchange', setupRestoredState);
       if (hls) {
@@ -224,6 +230,8 @@ export default function VideoPlayer({
     const video = videoRef.current;
     if (!video) return;
     if (!video.paused) {
+      startGateRef.current.arm('none');
+      startAttemptRef.current++;
       video.pause();
     } else {
       video.play().catch((error) => {
@@ -236,7 +244,7 @@ export default function VideoPlayer({
   const handleQualityChange = (source: VideoSource) => {
     if (!videoRef.current) return;
     seekOnLoadRef.current = videoRef.current.currentTime;
-    playOnLoadRef.current = isPlaying;
+    startGateRef.current.arm(intentAfterQualitySwitch(!videoRef.current.paused));
     setActiveSource(source);
     setShowQualityMenu(false);
   };
@@ -437,7 +445,10 @@ export default function VideoPlayer({
       <video
         ref={videoRef}
         onClick={togglePlay}
-        onPlay={() => setIsPlaying(true)}
+        onPlay={() => {
+          setIsPlaying(true);
+          setAutoplayBlocked(false);
+        }}
         onPause={() => setIsPlaying(false)}
         onEnded={() => setIsPlaying(false)}
         onTimeUpdate={handleTimeUpdate}
@@ -445,6 +456,17 @@ export default function VideoPlayer({
         className="w-full h-full object-contain cursor-pointer"
         playsInline
       />
+
+      {autoplayBlocked && !isPlaying && (
+        <button
+          type="button"
+          onClick={togglePlay}
+          aria-label="播放"
+          className="absolute inset-0 m-auto z-40 h-16 w-16 flex items-center justify-center rounded-full bg-primary/90 text-white shadow-lg shadow-primary/30 hover:bg-primary transition cursor-pointer"
+        >
+          <Play className="h-7 w-7 fill-white" />
+        </button>
+      )}
 
       {/* Sandboxed Danmaku Layer Overlay */}
       <DanmakuLayer

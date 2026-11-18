@@ -34,6 +34,31 @@ afterEach(() => { vi.useRealTimers(); storage.close(); });
 afterAll(() => { fs.rmSync(directory, { recursive: true, force: true }); });
 
 describe('aggregate source results', () => {
+  it('lists unconfigured private services separately without contacting them or changing activation', async () => {
+    const privateSource = { ...source('alist'), code: 'const url=globalThis.ALIST_BASE_URL;' };
+    vi.stubEnv('ALIST_BASE_URL', '');
+    vi.mocked(getPlugins).mockResolvedValue([privateSource, source('working')]);
+    vi.mocked(PluginManager.explore).mockResolvedValue({ success: true, data: [media] });
+    const body = await (await app.request('/api/aggregate/home?type=anime')).json() as any;
+    expect(body.sources[0]).toMatchObject({ id: 'alist', status: 'configuration_required', code: 'CONFIG_REQUIRED' });
+    expect(body.items).toHaveLength(1);
+    expect(PluginManager.explore).toHaveBeenCalledTimes(1);
+    expect(privateSource.isActive).toBe(true);
+    vi.unstubAllEnvs();
+  });
+
+  it('does not report a missing homepage as a broken source and distinguishes same-name implementations', async () => {
+    vi.mocked(getPlugins).mockResolvedValue([
+      { ...source('venera-manga_dex'), name: 'MangaDex' },
+      { ...source('mangayomi-manga-593575397'), name: 'MangaDex' },
+    ]);
+    vi.mocked(PluginManager.explore).mockResolvedValue({ success: false, error: "Method 'explore' is not defined on the plugin." });
+    const body = await (await app.request('/api/aggregate/home?type=anime')).json() as any;
+    expect(body.sources[0]).toMatchObject({ status: 'unsupported', code: 'HOME_UNSUPPORTED' });
+    expect(body.sources[0].displayName).not.toEqual(body.sources[1].displayName);
+    expect(body.emptyReason).toBe('sources_unavailable');
+  });
+
   it('excludes bundled demo sources from home, search and ranking recommendations', async () => {
     vi.mocked(getPlugins).mockResolvedValue([
       ...['ssrfun', 'cyfz', 'tver', 'dmzj-mock', 'movie-mock'].map(id => ({ ...source(id), isBuiltin: true })),

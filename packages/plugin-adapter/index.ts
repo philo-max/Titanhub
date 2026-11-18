@@ -272,26 +272,42 @@ const plugin = {
     const html = await fetch(pageUrl, { headers: HEADERS }).then(r => r.text());
     
     const isXPath = RULE.chapterRoads.startsWith('/') || RULE.chapterRoads.startsWith('//');
-    let list = [];
+    let lines = [];
     if (isXPath) {
       let roads = JSON.parse(htmlParser.select(html, RULE.chapterRoads) || '[]');
       if (!roads.length) roads = [{ html }];
-      roads.forEach((road, roadIndex) => {
+      lines = roads.map((road, roadIndex) => {
         const sub = JSON.parse(htmlParser.select(road.html, RULE.chapterResult) || '[]');
         const prefix = roads.length > 1 ? ('线路' + (roadIndex + 1) + '·') : '';
-        sub.forEach(item => list.push({ ...item, text: prefix + (item.text || '') }));
+        return sub.map(item => ({ ...item, text: prefix + (item.text || '') }));
       });
     } else {
-      list = JSON.parse(htmlParser.select(html, RULE.chapterRoads + ' ' + RULE.chapterResult) || '[]');
+      const combined = JSON.parse(htmlParser.select(html, RULE.chapterRoads + ' ' + RULE.chapterResult) || '[]');
+      const roads = JSON.parse(htmlParser.select(html, RULE.chapterRoads) || '[]');
+      const perRoad = roads.length > 1 ? roads.map(road => JSON.parse(htmlParser.select(road.html, RULE.chapterResult) || '[]')) : [];
+      const perRoadCount = perRoad.reduce((count, road) => count + road.length, 0);
+      lines = perRoad.length > 1 && perRoadCount === combined.length ? perRoad : [combined];
     }
 
-    return list
-      .filter(item => item.attrs && item.attrs.href)
-      .map((item, i) => ({
-        id: encodeURIComponent(item.attrs.href),
-        title: (item.text || '').replace(/\\s+/g, ' ').trim() || ('第 ' + (i + 1) + ' 话'),
-        chapterNo: i + 1,
-      }));
+    const multiLine = lines.length > 1;
+    const chapters = [];
+    lines.forEach((items, lineIndex) => {
+      items
+        .filter(item => item.attrs && item.attrs.href)
+        .forEach((item, i) => {
+          const chapter = {
+            id: encodeURIComponent(item.attrs.href),
+            title: (item.text || '').replace(/\\s+/g, ' ').trim() || ('第 ' + (i + 1) + ' 话'),
+            chapterNo: i + 1,
+          };
+          if (multiLine) {
+            chapter.lineId = 'line-' + (lineIndex + 1);
+            chapter.lineName = '线路' + (lineIndex + 1);
+          }
+          chapters.push(chapter);
+        });
+    });
+    return chapters;
   },
 
   async getVideoUrl(chapterId) {
@@ -362,8 +378,57 @@ globalThis.plugin = plugin;
   };
 }
 
+const VENERA_PAGE_BRIDGE = String.raw`
+function __veneraMedia(comic) {
+  return {
+    id: String(comic.id ?? comic.comicId ?? comic.url ?? ''),
+    title: comic.title ?? comic.name ?? '未命名',
+    cover: comic.cover ?? comic.coverUrl ?? '',
+    description: comic.description ?? comic.subTitle ?? comic.subtitle ?? '',
+  };
+}
+async function __veneraExplore(source) {
+  if (typeof source.explore === 'function') {
+    const result = await source.explore('manga');
+    if (!Array.isArray(result)) throw new Error('Invalid Venera homepage result');
+    return result.map(__veneraMedia);
+  }
+  const pages = Array.isArray(source.explore) ? source.explore : [];
+  const page = pages.find(item => ['multiPartPage', 'multiPageComicList', 'mixed'].includes(item.type) && (typeof item.load === 'function' || typeof item.loadNext === 'function'));
+  if (!page) throw new Error('HOME_UNSUPPORTED: This source does not provide a supported homepage.');
+  const result = typeof page.load === 'function'
+    ? await page.load(page.type === 'multiPartPage' ? null : page.type === 'mixed' ? 0 : 1)
+    : await page.loadNext(null);
+  let comics;
+  if (page.type === 'multiPageComicList') comics = result && result.comics;
+  else {
+    const parts = page.type === 'mixed' ? result && result.data : result;
+    if (!Array.isArray(parts)) throw new Error('Invalid Venera homepage sections');
+    comics = parts.flatMap(part => Array.isArray(part) ? part : part && Array.isArray(part.comics) ? part.comics : []);
+  }
+  if (!Array.isArray(comics)) throw new Error('Invalid Venera homepage comics');
+  return comics.map(__veneraMedia);
+}
+async function __veneraImagePages(source, pages, comicId, epId) {
+  if (!Array.isArray(pages)) throw new Error('Invalid Venera image list');
+  const owner = source.comic && typeof source.comic.onImageLoad === 'function' ? source.comic : source;
+  if (typeof owner.onImageLoad !== 'function') return pages;
+  return Promise.all(pages.map(async page => {
+    const url = typeof page === 'string' ? page : page.url;
+    const config = await owner.onImageLoad(url, comicId, epId) || {};
+    if (config.modifyImage || config.onResponse || config.onLoadFailed || config.data != null || (config.method && config.method.toUpperCase() !== 'GET')) {
+      throw new Error('SOURCE_CAPABILITY_UNSUPPORTED: Image transformations and custom image requests are not supported.');
+    }
+    const headers = { ...(typeof page === 'object' ? page.headers : {}), ...config.headers };
+    const target = config.url || url;
+    return Object.keys(headers).length ? { url: target, headers } : target;
+  }));
+}
+`;
+
 function veneraClassBridge(className: string): string {
   return `
+${VENERA_PAGE_BRIDGE}
 const __veneraInstance = new ${className}();
 
 function __veneraTagsToGenres(tags) {
@@ -385,6 +450,10 @@ function __veneraTagsToGenres(tags) {
 }
 
 globalThis.plugin = {
+  async explore() {
+    await __veneraInitialize(__veneraInstance);
+    return __veneraExplore(__veneraInstance);
+  },
   async search(query) {
     if (!__veneraInstance.search || !__veneraInstance.search.load) return [];
     await __veneraInitialize(__veneraInstance);
@@ -429,7 +498,7 @@ globalThis.plugin = {
     const comicId = sep >= 0 ? chapterId.slice(0, sep) : chapterId;
     const epId = sep >= 0 ? chapterId.slice(sep + 2) : null;
     const res = await __veneraInstance.comic.loadEp(comicId, epId);
-    return (res && res.images) || [];
+    return __veneraImagePages(__veneraInstance, (res && res.images) || [], comicId, epId);
   }
 };
 `;
@@ -473,6 +542,20 @@ export function upgradeLegacyLNReaderCode(code: string, meta: { id: string; name
   return source === null ? null : adaptLNReader(source, meta).code;
 }
 
+export function upgradeLegacyVeneraCode(code: string, meta: { id: string; name: string; version?: string }): string | null {
+  if (code.includes('async function __veneraExplore(')) return null;
+  const header = code.indexOf('// Wrapped Venera ');
+  if (header < 0) return null;
+  const sourceStart = code.indexOf('\n', header) + 1;
+  const classStart = code.indexOf(VENERA_SHIM, sourceStart);
+  const bridgeStart = classStart >= 0
+    ? code.indexOf('\nconst __veneraInstance = new ', classStart + VENERA_SHIM.length)
+    : code.indexOf('\nconst __venera = globalThis.plugin ||', sourceStart);
+  if (bridgeStart < 0) return null;
+  const source = code.slice(classStart >= 0 ? classStart + VENERA_SHIM.length : sourceStart, bridgeStart).trim();
+  return source ? adaptVenera(source, meta).code : null;
+}
+
 export function adaptVenera(
   source: string,
   meta: { id: string; name: string; version?: string }
@@ -496,7 +579,11 @@ if (!__venera) {
   throw new Error('Venera source did not register a global plugin/source object.');
 }
 
+${VENERA_PAGE_BRIDGE}
 globalThis.plugin = {
+  async explore() {
+    return __veneraExplore(__venera);
+  },
   async search(query) {
     const fn = __venera.search || __venera.searchComics;
     if (!fn) return [];
@@ -535,7 +622,7 @@ globalThis.plugin = {
     const fn = __venera.getImages || __venera.loadComicPages || __venera.loadImages;
     if (!fn) return [];
     const pages = await fn.call(__venera, chapterId);
-    return (pages || []).map(p => (typeof p === 'string' ? p : p.url ?? ''));
+    return __veneraImagePages(__venera, pages || [], undefined, chapterId);
   }
 };
 `;

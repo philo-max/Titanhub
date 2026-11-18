@@ -147,8 +147,10 @@ function SearchPageInner() {
       setItems([]);
       setSearchProgress({ done: 0, total: 0 });
       try {
+        const requestParams = new URLSearchParams({ q });
+        if (type) requestParams.set('type', type);
         const res = await fetch(
-          `${API_BASE}/api/aggregate/search?q=${encodeURIComponent(q)}&type=${type || 'anime'}`
+          `${API_BASE}/api/aggregate/search?${requestParams.toString()}`
         );
         const data = await res.json();
         if (!cancelled) {

@@ -72,11 +72,15 @@ class Chapter {
   final String id;
   final String title;
   final int? chapterNo;
+  final String? groupId;
+  final String? groupName;
 
   Chapter({
     required this.id,
     required this.title,
     this.chapterNo,
+    this.groupId,
+    this.groupName,
   });
 
   factory Chapter.fromJson(Map<String, dynamic> json) {
@@ -84,25 +88,55 @@ class Chapter {
       id: json['id'] ?? '',
       title: json['title'] ?? '',
       chapterNo: json['chapterNo'],
+      groupId: _optionalString(json['groupId'] ?? json['lineId']),
+      groupName: _optionalString(json['groupName'] ?? json['lineName']),
     );
   }
 }
 
 class VideoSource {
+  static const String typeDirect = 'direct';
+  static const String typePage = 'page';
+
   final String quality;
   final String url;
+  final Map<String, String> headers;
+  final String type;
 
   VideoSource({
     required this.quality,
     required this.url,
+    this.headers = const {},
+    this.type = typeDirect,
   });
+
+  bool get isPage => type == typePage;
 
   factory VideoSource.fromJson(Map<String, dynamic> json) {
     return VideoSource(
       quality: json['quality'] ?? '',
       url: json['url'] ?? '',
+      headers: _stringHeaders(json['headers']),
+      type: json['type'] == typePage ? typePage : typeDirect,
     );
   }
+}
+
+String? _optionalString(Object? value) {
+  if (value == null) return null;
+  final text = value.toString();
+  return text.isEmpty ? null : text;
+}
+
+Map<String, String> _stringHeaders(Object? raw) {
+  if (raw is! Map) return const {};
+  final headers = <String, String>{};
+  raw.forEach((key, value) {
+    if (key is String && key.isNotEmpty && value != null) {
+      headers[key] = value.toString();
+    }
+  });
+  return Map.unmodifiable(headers);
 }
 
 class DanmakuComment {

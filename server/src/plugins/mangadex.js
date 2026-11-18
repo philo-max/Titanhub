@@ -1,5 +1,6 @@
 // MangaDex (mangadex.org) 开放 API 插件 —— Titanhub 真实漫画插件。
 const API = 'https://api.mangadex.org';
+const API_REQUEST = { headers: { 'User-Agent': 'Titanhub/1.0' } };
 
 function getCoverUrl(item) {
   const relationships = item.relationships || [];
@@ -22,6 +23,78 @@ function getDescription(item) {
   return descObj.en || descObj.ja || Object.values(descObj)[0] || '';
 }
 
+const FEED_PAGE_LIMIT = 500;
+const MAX_FEED_PAGES = 20;
+const FEED_LANGUAGE_TIERS = [['zh', 'zh-hk'], ['en']];
+
+async function fetchFeedPage(mediaId, languages, offset) {
+  const languageQuery = languages.map((lang) => '&translatedLanguage[]=' + lang).join('');
+  const url = API + '/manga/' + mediaId + '/feed?limit=' + FEED_PAGE_LIMIT + '&offset=' + offset + languageQuery +
+              '&order[chapter]=asc&contentRating[]=safe&contentRating[]=suggestive&includes[]=scanlation_group';
+  const res = await fetch(url, API_REQUEST);
+  const text = await res.text();
+  let data = null;
+  try {
+    data = JSON.parse(text);
+  } catch (e) {
+    data = null;
+  }
+  const details = data && Array.isArray(data.errors)
+    ? data.errors.map((err) => err.detail || err.title).filter(Boolean).join('; ')
+    : '';
+  if (res.status < 200 || res.status >= 300) {
+    throw new Error('MangaDex 章节列表请求失败：HTTP ' + res.status + (details ? ' ' + details : ''));
+  }
+  if (!data || data.result === 'error' || !Array.isArray(data.data)) {
+    throw new Error('MangaDex 章节列表响应无效' + (details ? '：' + details : '。'));
+  }
+  return data;
+}
+
+async function fetchFeed(mediaId, languages) {
+  const items = [];
+  const seen = {};
+  let offset = 0;
+  for (let page = 0; page < MAX_FEED_PAGES; page++) {
+    const data = await fetchFeedPage(mediaId, languages, offset);
+    const list = data.data;
+    let added = 0;
+    for (const item of list) {
+      if (item && item.id && !seen[item.id]) {
+        seen[item.id] = true;
+        items.push(item);
+        added++;
+      }
+    }
+    offset += list.length;
+    const total = typeof data.total === 'number' ? data.total : null;
+    if (list.length === 0) return items;
+    if (total !== null && offset >= total) return items;
+    if (total === null && list.length < FEED_PAGE_LIMIT) return items;
+    if (added === 0) {
+      throw new Error('MangaDex 章节分页返回重复数据，已在 offset=' + offset + ' 停止。');
+    }
+  }
+  throw new Error('MangaDex 章节分页超过 ' + MAX_FEED_PAGES + ' 页上限。');
+}
+
+function versionKey(item) {
+  const attrs = item.attributes || {};
+  if (!attrs.chapter) return '';
+  return (attrs.volume || '') + '|' + attrs.chapter;
+}
+
+function isReadable(item) {
+  const attrs = item.attributes || {};
+  if (attrs.externalUrl) return false;
+  return !(typeof attrs.pages === 'number' && attrs.pages <= 0);
+}
+
+function groupName(item) {
+  const group = (item.relationships || []).find((r) => r.type === 'scanlation_group');
+  return group && group.attributes && group.attributes.name ? group.attributes.name : '';
+}
+
 const plugin = {
   id: 'mangadex',
   name: 'MangaDex 漫画',
@@ -30,7 +103,7 @@ const plugin = {
   async search(query) {
     const url = API + '/manga?limit=20&title=' + encodeURIComponent(query) +
                 '&contentRating[]=safe&contentRating[]=suggestive&includes[]=cover_art';
-    const res = await fetch(url);
+    const res = await fetch(url, API_REQUEST);
     const data = JSON.parse(await res.text());
     const list = data.data || [];
     return list.map((item) => ({
@@ -46,7 +119,7 @@ const plugin = {
     // Fetch popular mangas by followedCount descending
     const url = API + '/manga?limit=12&order[followedCount]=desc' +
                 '&contentRating[]=safe&contentRating[]=suggestive&includes[]=cover_art';
-    const res = await fetch(url);
+    const res = await fetch(url, API_REQUEST);
     const data = JSON.parse(await res.text());
     const list = data.data || [];
     return list.map((item) => ({
@@ -60,7 +133,7 @@ const plugin = {
 
   async getDetail(mediaId) {
     const url = API + '/manga/' + mediaId + '?includes[]=cover_art&includes[]=author';
-    const res = await fetch(url);
+    const res = await fetch(url, API_REQUEST);
     const data = JSON.parse(await res.text());
     const item = data.data;
     if (!item) {
@@ -87,24 +160,24 @@ const plugin = {
   },
 
   async getChapters(mediaId) {
-    // 1. Fetch Chinese translated chapters first
-    let feedUrl = API + '/manga/' + mediaId + '/feed?limit=500&translatedLanguage[]=zh&translatedLanguage[]=zh-hk&order[chapter]=asc&contentRating[]=safe&contentRating[]=suggestive';
-    let res = await fetch(feedUrl);
-    let data = JSON.parse(await res.text());
-    let list = data.data || [];
+    let list = [];
+    for (const languages of FEED_LANGUAGE_TIERS) {
+      list = (await fetchFeed(mediaId, languages)).filter(isReadable);
+      if (list.length > 0) break;
+    }
 
-    // 2. If no Chinese translations, fallback to English chapters
-    if (list.length === 0) {
-      feedUrl = API + '/manga/' + mediaId + '/feed?limit=500&translatedLanguage[]=en&order[chapter]=asc&contentRating[]=safe&contentRating[]=suggestive';
-      res = await fetch(feedUrl);
-      data = JSON.parse(await res.text());
-      list = data.data || [];
+    const versionCounts = {};
+    for (const item of list) {
+      const key = versionKey(item);
+      if (key) versionCounts[key] = (versionCounts[key] || 0) + 1;
     }
 
     return list.map((item) => {
       const attrs = item.attributes || {};
       const ch = attrs.chapter;
       const title = attrs.title;
+      const key = versionKey(item);
+      const versionLabel = key && versionCounts[key] > 1 ? ' [' + [groupName(item), attrs.translatedLanguage].filter(Boolean).join(' · ') + ']' : '';
       let displayTitle = '';
       if (ch && title) {
         displayTitle = '第' + ch + '话 ' + title;
@@ -118,7 +191,7 @@ const plugin = {
 
       return {
         id: item.id,
-        title: displayTitle,
+        title: displayTitle + versionLabel,
         chapterNo: ch ? parseFloat(ch) : 0,
       };
     });
@@ -127,7 +200,7 @@ const plugin = {
   async getImages(chapterId) {
     // 1. Ask MangaDex At-Home server for the CDN base URL and token
     const url = API + '/at-home/server/' + chapterId;
-    const res = await fetch(url);
+    const res = await fetch(url, API_REQUEST);
     const data = JSON.parse(await res.text());
     
     const baseUrl = data.baseUrl;
@@ -140,7 +213,10 @@ const plugin = {
     }
 
     // 2. Build direct CDN URLs for each page
-    return files.map((filename) => baseUrl + '/data/' + hash + '/' + filename);
+    return files.map((filename) => ({
+      url: baseUrl + '/data/' + hash + '/' + filename,
+      headers: API_REQUEST.headers,
+    }));
   },
 };
 

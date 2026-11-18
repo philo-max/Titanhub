@@ -3,6 +3,7 @@
 import React, { useRef } from 'react';
 import gsap from 'gsap';
 import { MediaItem } from '@titanhub/plugin-types';
+import SmartImage from './SmartImage';
 
 export default function MediaCard({
   item,
@@ -14,7 +15,7 @@ export default function MediaCard({
   isInfoSource?: boolean;
 }) {
   const cardRef = useRef<HTMLDivElement>(null);
-  const imageRef = useRef<HTMLImageElement>(null);
+  const imageRef = useRef<HTMLDivElement>(null);
 
   const quickToRef = useRef<{
     rotateY?: ReturnType<typeof gsap.quickTo>;
@@ -80,14 +81,15 @@ export default function MediaCard({
     >
       <div className="relative aspect-[2/3] w-full overflow-hidden rounded-md bg-surfaceLight">
         {item.cover ? (
-          <img
-            ref={imageRef}
-            src={item.cover}
-            alt={item.title}
-            className="absolute inset-0 w-full h-full object-cover scale-[1.05]"
-            loading="lazy"
-            decoding="async"
-          />
+          <div ref={imageRef} className="absolute inset-0 scale-[1.05]">
+            <SmartImage
+              src={item.cover}
+              alt={item.title}
+              fill
+              sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+              className="object-cover"
+            />
+          </div>
         ) : (
           <div className="absolute inset-0 w-full h-full bg-gradient-to-br from-primary/15 via-surfaceLight to-secondary/15 flex flex-col items-center justify-center gap-2">
             <span className="text-3xl font-bold text-textTertiary/30 select-none">

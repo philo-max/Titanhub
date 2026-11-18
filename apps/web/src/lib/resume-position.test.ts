@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findResumeLog, mangaResumePage, novelResumeRatio, videoResumeTime } from './resume-position';
+import { findResumeLog, findMangaContinueChapter, mangaResumePage, novelResumeRatio, videoResumeTime } from './resume-position';
 
 describe('resume positions', () => {
   const log = { mediaType: 'anime', pluginId: 'source-a', mediaId: 'media', chapterId: 'chapter', progress: 0.5, position: 30 };
@@ -11,6 +11,16 @@ describe('resume positions', () => {
       { ...log, mediaId: 'other' }, { ...log, chapterId: 'other' },
       { ...log, chapterId: undefined },
     ]) expect(findResumeLog([log], identity)).toBeUndefined();
+  });
+
+  it('offers a manga continuation only for the same source and an available chapter', () => {
+    const saved = { ...log, mediaType: 'manga' };
+    const chapter = { id: 'chapter', title: '第一话' };
+    expect(findMangaContinueChapter([saved], saved, [chapter])).toBe(chapter);
+    expect(findMangaContinueChapter([saved], { ...saved, pluginId: 'other' }, [chapter])).toBeUndefined();
+    expect(findMangaContinueChapter([saved], { ...saved, mediaId: 'other' }, [chapter])).toBeUndefined();
+    expect(findMangaContinueChapter([saved], saved, [{ id: 'removed' }])).toBeUndefined();
+    expect(findMangaContinueChapter([{ ...saved, chapterId: undefined }], saved, [chapter])).toBeUndefined();
   });
 
   it('restores video seconds, including an explicit restart at zero', () => {

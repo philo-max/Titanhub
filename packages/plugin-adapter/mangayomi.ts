@@ -198,7 +198,7 @@ globalThis.plugin = {
     if (__meta.type !== 'manga') __unsupported('getImages for novel');
     const pages = await __call('getPageList', [__input(id)]);
     if (!Array.isArray(pages)) throw new Error('Mangayomi invalid page list');
-    return pages.map(page => { const url = typeof page === 'string' ? page : page.url; if (!url) throw new Error('Mangayomi page missing url'); return __absolute(url, __absolute(__input(id), __meta.baseUrl + '/')); });
+    return pages.map(page => { const url = typeof page === 'string' ? page : page.url; if (!url) throw new Error('Mangayomi page missing url'); const absolute = __absolute(url, __absolute(__input(id), __meta.baseUrl + '/')); const headers = page && typeof page === 'object' && page.headers && typeof page.headers === 'object' ? page.headers : null; return headers && Object.keys(headers).length > 0 ? { url: absolute, headers } : absolute; });
   },
   async getContent(id) {
     if (__meta.type !== 'novel') __unsupported('getContent for manga');

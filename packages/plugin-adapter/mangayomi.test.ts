@@ -143,4 +143,37 @@ describe('Mangayomi JavaScript adapter', () => {
     const chapters = await plugin.getChapters('/book/a%2Fb');
     expect(await plugin.getImages(chapters[0].id)).toEqual(['https://cdn.example/one.jpg']);
   });
+
+  it('keeps page headers as minimal image descriptors and plain strings otherwise', async () => {
+    const source = `class DefaultExtension extends MProvider {
+      async getDetail(id) { return {name:id,chapters:[{name:'One',url:'https://olympustaff.com/chapter/1'}]}; }
+      async getPageList() { return [
+        {url:'https://cdn.example/a.jpg?sig=x%2By&exp=1', headers:{Referer:'https://olympustaff.com/', 'User-Agent':'UA'}},
+        {url:'/b.jpg'},
+        'https://cdn.example/c.jpg',
+        {url:'https://cdn.example/d.jpg', headers:{}},
+        {url:'https://cdn.example/e.jpg', headers:null},
+      ]; }
+    }`;
+    const { plugin } = load(source, []);
+    const chapters = await plugin.getChapters('/series/1');
+    expect(await plugin.getImages(chapters[0].id)).toEqual([
+      { url: 'https://cdn.example/a.jpg?sig=x%2By&exp=1', headers: { Referer: 'https://olympustaff.com/', 'User-Agent': 'UA' } },
+      'https://olympustaff.com/b.jpg',
+      'https://cdn.example/c.jpg',
+      'https://cdn.example/d.jpg',
+      'https://cdn.example/e.jpg',
+    ]);
+  });
+
+  it('returns header descriptors through the production QuickJS sandbox', async () => {
+    const { PluginSandbox } = await import('../../server/src/plugins/sandbox');
+    const source = `class DefaultExtension extends MProvider {
+      async getPageList() { return [{url:'https://cdn.example/a.jpg', headers:{Referer:'https://olympustaff.com/'}}, 'https://cdn.example/b.jpg']; }
+    }`;
+    const sandbox = new PluginSandbox('mangayomi-headers-fixture', adaptMangayomi(source, metadata).code);
+    const result = await sandbox.runMethod<unknown[]>('getImages', ['mangayomi-chapter:' + encodeURIComponent('https://olympustaff.com/chapter/1')]);
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual([{ url: 'https://cdn.example/a.jpg', headers: { Referer: 'https://olympustaff.com/' } }, 'https://cdn.example/b.jpg']);
+  });
 });

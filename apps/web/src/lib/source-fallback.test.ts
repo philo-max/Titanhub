@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { cleanTitle, findPlayableAlternative, pickEpisode } from './source-fallback';
+import { cleanTitle, episodeKey, findPlayableAlternative, pickEpisode } from './source-fallback';
 
 vi.mock('./config', () => ({ API_BASE: 'http://api.test' }));
 
@@ -32,10 +32,43 @@ describe('cleanTitle', () => {
 });
 
 describe('pickEpisode', () => {
-  it('prefers the matching chapter number and falls back to the index', () => {
-    const chapters = [{ id: 'a', chapterNo: 3 }, { id: 'b', chapterNo: 4 }];
-    expect(pickEpisode(chapters, 4, 0)?.id).toBe('b');
-    expect(pickEpisode([{ id: 'x' }, { id: 'y' }], 9, 1)?.id).toBe('y');
+  const line = (lineId: string, lineName: string, numbers: number[]) =>
+    numbers.map(no => ({ id: `${lineId}-${no}`, title: `${lineName}·第${no}集`, lineId, lineName, chapterNo: no }));
+
+  it('matches the real episode number instead of a global position', () => {
+    const current = [...line('line-1', 'A', [1, 2, 3]), ...line('line-2', 'B', [1, 2, 3])];
+    const target = [{ id: 'x1', title: '第1集', chapterNo: 1 }, { id: 'x2', title: '第2集', chapterNo: 2 }, { id: 'x4', title: '第4集', chapterNo: 4 }];
+    expect(pickEpisode(target, episodeKey(current, 'line-2-1')!)?.id).toBe('x1');
+    expect(pickEpisode(target, episodeKey(current, 'line-2-3')!)).toBeUndefined();
+  });
+
+  it('prefers the same line name and ignores positional chapter numbers', () => {
+    const target = [...line('line-1', 'A', [5]), ...line('line-2', 'B', [5])];
+    expect(pickEpisode(target, { episode: 5, lineName: 'B', label: '第5集', single: false })?.id).toBe('line-2-5');
+    expect(pickEpisode([{ id: 'p', title: '正片', chapterNo: 4 }], { episode: 4, label: '第4集', single: false })).toBeUndefined();
+  });
+
+  it('never guesses an unknown episode by position', () => {
+    const current = [{ id: 'sp', title: 'SP' }, { id: 'e1', title: '第1集' }];
+    const key = episodeKey(current, 'sp')!;
+    expect(pickEpisode([{ id: 'other', title: 'OVA' }, { id: 'one', title: '第1集' }], key)).toBeUndefined();
+    expect(pickEpisode([{ id: 'same', title: 'SP' }], key)?.id).toBe('same');
+    expect(episodeKey(current, 'missing')).toBeUndefined();
+  });
+
+  it('reads duplicate chapter ids only through the requested line', () => {
+    const current = [
+      { id: 'same', title: '第1集', lineId: 'a', lineName: 'A' }, { id: 'same', title: '第3集', lineId: 'b', lineName: 'B' },
+    ];
+    expect(episodeKey(current, 'same', 'b')).toMatchObject({ episode: 3, lineName: 'B' });
+    expect(episodeKey(current, 'same', 'a')).toMatchObject({ episode: 1, lineName: 'A' });
+    expect(episodeKey(current, 'same')).toBeUndefined();
+  });
+
+  it('pairs single-chapter works even without episode numbers', () => {
+    const key = episodeKey([{ id: 'm', title: '正片' }], 'm')!;
+    expect(pickEpisode([{ id: 'hd', title: 'HD中字' }], key)?.id).toBe('hd');
+    expect(pickEpisode([{ id: 'a', title: 'HD' }, { id: 'b', title: 'TC' }], key)).toBeUndefined();
   });
 });
 
@@ -54,15 +87,15 @@ describe('findPlayableAlternative', () => {
       }],
     },
   };
-  const currentChapters = { match: '/api/plugins/cur/chapters/', body: { chapters: [{ id: 'c1', chapterNo: 1 }, { id: 'c2', chapterNo: 2 }] } };
+  const currentChapters = { match: '/api/plugins/cur/chapters/', body: { chapters: [{ id: 'c1', title: '第1集', chapterNo: 1 }, { id: 'c2', title: '第2集', chapterNo: 2 }] } };
 
   it('skips failing sources and returns the first one that plays the same episode', async () => {
     const calls = stubApi([
       search,
       currentChapters,
-      { match: '/api/plugins/bad/chapters/', body: { chapters: [{ id: 'b1', chapterNo: 1 }, { id: 'b2', chapterNo: 2 }] } },
+      { match: '/api/plugins/bad/chapters/', body: { chapters: [{ id: 'b1', title: '第1集', chapterNo: 1 }, { id: 'b2', title: '第2集', chapterNo: 2 }] } },
       { match: '/api/plugins/bad/video/b2', body: { videos: [] } },
-      { match: '/api/plugins/good/chapters/', body: { chapters: [{ id: 'g1', chapterNo: 1 }, { id: 'g2', chapterNo: 2 }] } },
+      { match: '/api/plugins/good/chapters/', body: { chapters: [{ id: 'g1', title: '第1集', chapterNo: 1 }, { id: 'g2', title: '第2集', chapterNo: 2 }] } },
       { match: '/api/plugins/good/video/g2', body: { videos: [{ quality: '默认', url: 'http://v/2.mp4' }] } },
     ]);
     const attempts: string[] = [];
@@ -81,7 +114,7 @@ describe('findPlayableAlternative', () => {
     stubApi([
       search,
       currentChapters,
-      { match: '/api/plugins/good/chapters/', body: { chapters: [{ id: 'g2', chapterNo: 2 }] } },
+      { match: '/api/plugins/good/chapters/', body: { chapters: [{ id: 'g2', title: '第2集', chapterNo: 2 }] } },
       { match: '/api/plugins/good/video/', body: { error: 'nope' } },
     ]);
 
@@ -90,6 +123,39 @@ describe('findPlayableAlternative', () => {
     });
 
     expect(result).toBeNull();
+  });
+
+  it('matches the second line episode one instead of the flat position', async () => {
+    stubApi([
+      search,
+      { match: '/api/plugins/cur/chapters/', body: { chapters: [
+        { id: 'a1', title: 'A·第1集', lineId: 'line-1', lineName: 'A', chapterNo: 1 },
+        { id: 'a2', title: 'A·第2集', lineId: 'line-1', lineName: 'A', chapterNo: 2 },
+        { id: 'b1', title: 'B·第1集', lineId: 'line-2', lineName: 'B', chapterNo: 1 },
+      ] } },
+      { match: '/api/plugins/bad/chapters/', body: { chapters: [] } },
+      { match: '/api/plugins/good/chapters/', body: { chapters: [{ id: 'g1', title: '第1集' }, { id: 'g2', title: '第2集' }, { id: 'g3', title: '第3集' }] } },
+      { match: '/api/plugins/good/video/g1', body: { videos: [{ quality: '默认', url: 'http://v/1.mp4' }] } },
+    ]);
+    const result = await findPlayableAlternative({ title: '尼古喵喵', pluginId: 'cur', mediaId: 'm-cur', chapterId: 'b1', lineId: 'line-2', tried: [] });
+    expect(result).toMatchObject({ pluginId: 'good', chapterId: 'g1' });
+    expect(result?.lineId).toBeUndefined();
+  });
+
+  it('keeps the matched line of the alternative source for the next route', async () => {
+    stubApi([
+      search,
+      { match: '/api/plugins/cur/chapters/', body: { chapters: [
+        { id: 'same', title: '第1集', lineId: 'a' }, { id: 'same', title: '第2集', lineId: 'b' },
+      ] } },
+      { match: '/api/plugins/bad/chapters/', body: { chapters: [] } },
+      { match: '/api/plugins/good/chapters/', body: { chapters: [
+        { id: 'g1', title: '第1集', lineId: 'x' }, { id: 'g2', title: '第2集', lineId: 'y', lineName: 'Y' },
+      ] } },
+      { match: '/api/plugins/good/video/g2', body: { videos: [{ quality: '默认', url: 'http://v/2.mp4' }] } },
+    ]);
+    const result = await findPlayableAlternative({ title: '尼古喵喵', pluginId: 'cur', mediaId: 'm-cur', chapterId: 'same', lineId: 'b', tried: [] });
+    expect(result).toMatchObject({ pluginId: 'good', chapterId: 'g2', lineId: 'y' });
   });
 
   it('gives up when the current episode cannot be located', async () => {

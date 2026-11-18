@@ -1,5 +1,8 @@
 import { getPlugin } from '../db/db';
+import { upgradeLegacyVeneraCode } from '@titanhub/plugin-adapter';
+import { sourceConfigurationMessage } from '../sources/identity';
 import { PluginSandbox, SandboxResult } from './sandbox';
+import type { MangaImageResult } from './manga-images';
 import type {
   MediaItem,
   MediaDetail,
@@ -20,7 +23,10 @@ export class PluginManager {
     if (!dbPlugin.isActive) {
       throw new Error(`Plugin '${pluginId}' is deactivated.`);
     }
-    return new PluginSandbox(pluginId, dbPlugin.code);
+    const configuration = sourceConfigurationMessage(dbPlugin);
+    if (configuration) throw new Error(`CONFIG_REQUIRED: ${configuration}`);
+    const code = upgradeLegacyVeneraCode(dbPlugin.code, dbPlugin) ?? dbPlugin.code;
+    return new PluginSandbox(pluginId, code);
   }
 
   /**
@@ -89,10 +95,10 @@ export class PluginManager {
   /**
    * Get reader page images (Manga).
    */
-  static async getImages(pluginId: string, chapterId: string): Promise<SandboxResult<string[]>> {
+  static async getImages(pluginId: string, chapterId: string): Promise<SandboxResult<MangaImageResult[]>> {
     try {
       const sandbox = await this.getSandbox(pluginId);
-      return await sandbox.runMethod<string[]>('getImages', [chapterId]);
+      return await sandbox.runMethod<MangaImageResult[]>('getImages', [chapterId]);
     } catch (e: any) {
       return { success: false, error: e.message || String(e) };
     }

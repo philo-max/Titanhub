@@ -17,6 +17,14 @@ export function findResumeLog<T extends ResumeIdentity>(logs: T[], identity: Res
     && log.chapterId === identity.chapterId);
 }
 
+export function findMangaContinueChapter<T extends { id: string }>(
+  logs: ResumeIdentity[], identity: Pick<ResumeIdentity, 'pluginId' | 'mediaId'>, chapters: T[]
+): T | undefined {
+  const log = logs.find((entry) => entry.mediaType === 'manga'
+    && entry.pluginId === identity.pluginId && entry.mediaId === identity.mediaId);
+  return log?.chapterId ? chapters.find((chapter) => chapter.id === log.chapterId) : undefined;
+}
+
 function finitePosition(value: number | null | undefined): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }

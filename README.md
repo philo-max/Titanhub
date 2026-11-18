@@ -54,7 +54,7 @@ Web 端内容卡片实现了 144Hz 锁帧的 GPU 加速 3D 悬停倾斜效果（
 
 ### 5. 追番追踪与跨端同步
 
-浏览器部署沿用 JWT 账号与 PostgreSQL 追踪记录。Windows Electron 客户端无需注册，收藏及观看、阅读进度直接保存在本机，可选用自己的 WebDAV 手动同步。Flutter 与桌面的 WebDAV 互通尚未实现。
+浏览器部署沿用 JWT 账号与 PostgreSQL 追踪记录。Windows Electron 与 Android 客户端无需注册，收藏及观看、阅读进度直接保存在本机，可选用自己的 WebDAV 手动同步；两端使用相同目录与数据协议，手机无需连接电脑。
 
 ### 6. 弹幕系统
 
@@ -62,7 +62,7 @@ Web 端内容卡片实现了 144Hz 锁帧的 GPU 加速 3D 悬停倾斜效果（
 
 ## 📥 客户端下载与使用指南 (v1.0.8)
 
-当前已发布 [Titanhub v1.0.8](https://github.com/philo-max/Titanhub/releases/tag/v1.0.8)，本次附件为 **Windows x64 Electron 安装包**，包含新的手绘拟人 Logo 与视频快捷键：
+已发布的 [Titanhub v1.0.8](https://github.com/philo-max/Titanhub/releases/tag/v1.0.8) 提供 **Windows x64 Electron 安装包**，包含手绘拟人 Logo 与视频快捷键：
 
 1. 下载 [Titanhub-Setup-1.0.8-x64.exe](https://github.com/philo-max/Titanhub/releases/download/v1.0.8/Titanhub-Setup-1.0.8-x64.exe)。
 2. 如已运行旧版，先正常退出程序，再运行安装向导；支持选择安装目录、创建快捷方式和系统卸载。
@@ -72,14 +72,41 @@ Web 端内容卡片实现了 144Hz 锁帧的 GPU 加速 3D 悬停倾斜效果（
 
 Android、iOS 与 Flutter Windows 是独立构建目标，**v1.0.8 未提供这些平台的附件**。需要自行构建时，请参阅下方开发说明；后续下载以 [Releases](https://github.com/philo-max/Titanhub/releases) 实际附件为准。
 
+### 1.1.0 本地验收版
+
+Windows 1.1.0 已修复漫画卡片封面、外链章节误入阅读器和图片加载问题，并增加同来源作品的继续阅读入口。Android 1.1.0+6 支持分类搜索，并修复续读时图片高度变化导致页码漂移的问题。
+
+WebDAV 已通过两个实际客户端界面的双向验证：电脑第 8 页同步到 Android，Android 读到第 9 页后再同步回电脑。Android 验证环境为 API 36、16KB 页大小模拟器；本轮未发布 GitHub，构建产物不入库。
+
+动漫真实视频已能打开并推进播放时间；Android 16 模拟器仍有黑屏，真机出画尚待设备回归，不能视为完整播放验收通过。[上游同类报告](https://github.com/media-kit/media-kit/issues/1343)。
+
 > [!TIP]
 > **本地联调与后端连接配置：**
 > 
 > Electron 已内置 API 服务；独立 Web 和 Flutter 客户端的开发联调需要配置后端连接。
 > 1. **Windows 桌面端**：Electron 安装后直接启动，内置运行环境，无需用户另行安装 Node/PostgreSQL 或手动启动后端；旧 Flutter ZIP 仍按其服务器配置使用。
 > 2. **Android 手机客户端**：
->    *   **模拟器**：默认路由到 `http://10.0.2.2:3001` 访问主机的本地服务。
->    *   **真机联调**：确保手机和电脑在**同一局域网（同一个 Wi-Fi）**下。在手机端搜索页右上方，**点击 Online/Offline 状态指示器**，在弹出的“配置服务器 URL”窗口中输入您电脑的局域网 IP（如 `http://192.168.1.100:3001`）并点击保存，客户端就会立刻动态刷新重载、重新请求获取数据源插件！
+>    *   **1.1.0 默认本机运行**：无需开电脑或登录，手机直接请求内容来源，收藏与最近进度保存在手机内部数据库。读取在线来源仍需联网。
+>    *   **当前范围**：Bangumi 提供资料与章节，MangaDex 提供漫画接口；Mock 不出现在可用来源中。桌面全部来源与视频来源市场尚未移植。
+>    *   **分类搜索**：可先选全部、动漫、漫画、小说或影视，仅搜索对应的已启用来源；当前没有本机小说、影视来源，会明确提示。七色番动漫已接入本机搜索、多线路与分段选集，真实手机播放仍在验收中。
+>    *   **WebDAV**：首页打开「WebDAV 同步」，填写与电脑相同的 WebDAV 地址及账号，保存、测试连接后点击「立即同步」。支持收藏、取消收藏及最近进度，不会同步或安装来源，也不会把密码写入同步数据文件。
+>    *   **跨端续读**：先在当前设备保存进度并同步，再在另一台设备同步后打开同一来源的同一作品。同步是手动触发，并非实时推送；同名但来源不同的作品不会自动合并进度。漫画传递页码，视频传递播放位置。
+>    *   **可选远端**：在来源面板显式开启后才尝试服务器接口。真机需手动填写可访问的服务器地址；`10.0.2.2` 仅适用于 Android 模拟器访问电脑，不是真机默认服务。
+
+## Android 1.1.0 本地构建
+
+使用 Flutter 3.47.8、JDK 17 和 Android SDK；本地构建与测试按顺序执行，避免测试注册器覆盖发布构建的插件注册器。测试后执行正常的 `flutter build apk --release`，不要用 `--no-pub` 跳过发布插件注册表的刷新。
+
+```bash
+cd apps/mobile
+flutter pub get
+flutter test test
+flutter analyze --no-fatal-infos
+dart run flutter_launcher_icons -f flutter_launcher_icons_android.yaml
+flutter build apk --release
+```
+
+输出 `apps/mobile/build/app/outputs/flutter-apk/app-release.apk`，当前为内部测试签名。正式分发前需要配置长期签名，私钥和 `key.properties` 不入库。移动端使用本地 JS 桥接，不能把桌面 Wasm 沙箱的兼容性与隔离保证直接等同于手机引擎。
 
 ## Windows 本地资料与可选 WebDAV
 
@@ -95,7 +122,7 @@ Windows 新安装或旧版升级请使用已发布的 **1.0.8** 安装包。升�
 2. 默认使用 HTTPS。仅在明确接受用户名和密码可能明文传输时启用 HTTP 开关。
 3. 点击「测试连接」，成功后点击「立即同步」。修改配置后需先保存；同步会先确认本地写入，再刷新收藏和进度。
 
-密码不会回显；地址与账号不变时，密码留空可保留已保存值，更换地址或账号后须重新输入。未配置 WebDAV 时仍可正常使用本地资料。同步仅包括收藏与最近位置，不包括媒体文件、插件或账号凭据。目前已实现 Windows 手动同步，真实 NAS 兼容性仍待验证，手机互通尚未提供。
+密码不会回显；地址与账号不变时，密码留空可保留已保存值，更换地址或账号后须重新输入。未配置 WebDAV 时仍可正常使用本地资料。同步仅包括收藏与最近位置，不包括媒体文件、插件或账号凭据。Windows 与 Android 1.1.0 使用 `Titanhub/sync/v1/devices/` 协议；两端都需手动同步一次来交换变更。跨运行时的临时 WebDAV 互通已验证，真实 NAS/网盘的兼容性仍需按服务验证。手机尚未支持的来源会保留记录，但无法直接打开对应内容。
 
 ## Windows 安装包本地构建
 

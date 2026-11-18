@@ -1,8 +1,8 @@
 'use client';
 
-import React, { use, useEffect, useState, useRef } from 'react';
+import React, { use, useEffect, useMemo, useState, useRef } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   animatePlayPageEntrance,
   animatePlayPageExitNext,
@@ -17,6 +17,9 @@ import { useAuthStore } from '@/stores/authStore';
 import { API_BASE } from '@/lib/config';
 import { playbackCache } from '@/lib/playbackCache';
 import { findPlayableAlternative } from '@/lib/source-fallback';
+import type { Chapter } from '@titanhub/plugin-types';
+import EpisodeSelector from '@/components/EpisodeSelector';
+import { episodeLabel, episodeNumber, groupChapterLines, lineQuery, nextInLine } from '@/lib/chapter-groups';
 
 const VideoPlayer = dynamic(() => import('@/components/VideoPlayer'), {
   ssr: false,
@@ -34,12 +37,6 @@ interface Params {
   chapterId: string;
 }
 
-interface Chapter {
-  id: string;
-  title: string;
-  chapterNo?: number;
-}
-
 interface VideoSource {
   quality: string;
   url: string;
@@ -53,6 +50,7 @@ export default function AnimePlayPage({ params }: { params: Promise<Params> }) {
 function AnimePlayPageContent({ params }: { params: Promise<Params> }) {
   const { pluginId, mediaId, chapterId } = use(params);
   const router = useRouter();
+  const lineId = useSearchParams().get('lineId') ?? undefined;
   const pageRef = useRef<HTMLDivElement>(null);
 
   const [sources, setSources] = useState<VideoSource[]>([]);
@@ -96,14 +94,16 @@ function AnimePlayPageContent({ params }: { params: Promise<Params> }) {
         .catch(() => null);
       const title: string | undefined = detailData?.detail?.title;
       if (!title) return false;
-      const tried = new URLSearchParams(window.location.search).get('tried')?.split(',').filter(Boolean) ?? [];
+      const query = new URLSearchParams(window.location.search);
+      const tried = query.get('tried')?.split(',').filter(Boolean) ?? [];
       const found = await findPlayableAlternative({
-        title, pluginId, mediaId, chapterId, tried, signal: controller.signal,
+        title, pluginId, mediaId, chapterId, lineId: query.get('lineId') ?? undefined, tried, signal: controller.signal,
         onAttempt: (source, attempt, total) => setFallbackNote(`正在尝试其他来源：${source.pluginName}（${attempt}/${total}）`),
       });
       if (!found || controller.signal.aborted) return false;
       playbackCache.set(found.pluginId, found.chapterId, { sources: found.videos });
-      router.replace(`/anime/${found.pluginId}/${found.mediaId}/play/${found.chapterId}?tried=${[...tried, pluginId].join(',')}`);
+      const lineParam = found.lineId ? `&lineId=${encodeURIComponent(found.lineId)}` : '';
+      router.replace(`/anime/${found.pluginId}/${found.mediaId}/play/${found.chapterId}?tried=${[...tried, pluginId].join(',')}${lineParam}`);
       return true;
     };
 
@@ -186,20 +186,18 @@ function AnimePlayPageContent({ params }: { params: Promise<Params> }) {
     }
   }, [loading, resumeReady, sources]);
 
-  // Determine next episode
-  const getNextChapter = () => {
-    const currentIndex = chapters.findIndex((c) => c.id === chapterId);
-    if (currentIndex >= 0 && currentIndex < chapters.length - 1) {
-      return chapters[currentIndex + 1];
-    }
-    return null;
+  const lines = useMemo(() => groupChapterLines(chapters), [chapters]);
+  const nextChapter = nextInLine(lines, chapterId, lineId) ?? null;
+  const playHref = (chapter: Chapter) => {
+    const query = lineQuery(chapter);
+    return `/anime/${pluginId}/${mediaId}/play/${chapter.id}${query ? `?${query}` : ''}`;
   };
-  const nextChapter = getNextChapter();
+  const progressChapterNo = currentChapter ? episodeNumber(currentChapter) ?? currentChapter.chapterNo ?? 1 : 1;
 
   const handleNextChapterClick = () => {
     if (nextChapter) {
       animatePlayPageExitNext(pageRef.current, () => {
-        router.push(`/anime/${pluginId}/${mediaId}/play/${nextChapter.id}`);
+        router.push(playHref(nextChapter));
       });
     }
   };
@@ -253,24 +251,25 @@ function AnimePlayPageContent({ params }: { params: Promise<Params> }) {
             <p className="text-sm text-textSecondary text-center mb-4">
               该集解析失败，换一条线路或其他选集试试：
             </p>
-            <div className="flex flex-wrap gap-3 justify-center max-h-64 overflow-y-auto">
-              {chapters.map((ch) => {
-                const isActive = ch.id === chapterId;
-                return (
-                  <Link
-                    key={ch.id}
-                    href={`/anime/${pluginId}/${mediaId}/play/${ch.id}`}
-                    className={`text-xs px-4 py-2.5 rounded-xl border font-semibold transition-all active:scale-95 ${
-                      isActive
-                        ? 'bg-rose-500/20 border-rose-500/40 text-rose-300'
-                        : 'bg-surface border-border text-textSecondary hover:text-textPrimary hover:border-surfaceLight'
-                    }`}
-                  >
-                    {ch.title}
-                  </Link>
-                );
-              })}
-            </div>
+            <EpisodeSelector
+              lines={lines}
+              activeChapterId={chapterId}
+              activeLineId={lineId}
+              listClassName="flex flex-wrap gap-3 justify-center max-h-64 overflow-y-auto"
+              renderEpisode={(ch, active) => (
+                <Link
+                  key={ch.id}
+                  href={playHref(ch)}
+                  className={`text-xs px-4 py-2.5 rounded-xl border font-semibold transition-all active:scale-95 ${
+                    active
+                      ? 'bg-rose-500/20 border-rose-500/40 text-rose-300'
+                      : 'bg-surface border-border text-textSecondary hover:text-textPrimary hover:border-surfaceLight'
+                  }`}
+                >
+                  {episodeLabel(ch)}
+                </Link>
+              )}
+            />
           </div>
         )}
       </div>
@@ -302,7 +301,7 @@ function AnimePlayPageContent({ params }: { params: Promise<Params> }) {
             <Compass className="h-3 w-3 text-primary" />
             <span>沙箱插件: {pluginId}</span>
             <span>•</span>
-            <span>当前话: {currentChapter?.chapterNo ?? 1}</span>
+            <span>当前话: {currentChapter ? episodeNumber(currentChapter) ?? episodeLabel(currentChapter) : 1}</span>
           </p>
         </div>
 
@@ -328,7 +327,7 @@ function AnimePlayPageContent({ params }: { params: Promise<Params> }) {
                   mediaId,
                   pluginId,
                   mediaType: 'anime',
-                  chapterNo: currentChapter?.chapterNo ?? 1,
+                  chapterNo: progressChapterNo,
                   chapterId,
                   progress: duration > 0 ? time / duration : 0,
                   position: time,
@@ -346,24 +345,25 @@ function AnimePlayPageContent({ params }: { params: Promise<Params> }) {
             <span>快速选集</span>
           </h3>
 
-          <div className="flex flex-wrap gap-3">
-            {chapters.map((ch) => {
-              const isActive = ch.id === chapterId;
-              return (
-                <Link
-                  key={ch.id}
-                  href={`/anime/${pluginId}/${mediaId}/play/${ch.id}`}
-                  className={`text-xs px-4 py-2.5 rounded-xl border font-semibold transition-all duration-300 active:scale-95 ${
-                    isActive
-                      ? 'bg-primary border-primary text-white shadow-lg shadow-primary/25'
-                      : 'bg-surface border-border text-textSecondary hover:text-textPrimary hover:border-surfaceLight'
-                  }`}
-                >
-                  {ch.title}
-                </Link>
-              );
-            })}
-          </div>
+          <EpisodeSelector
+            lines={lines}
+            activeChapterId={chapterId}
+            activeLineId={lineId}
+            listClassName="flex flex-wrap gap-3"
+            renderEpisode={(ch, active) => (
+              <Link
+                key={ch.id}
+                href={playHref(ch)}
+                className={`text-xs px-4 py-2.5 rounded-xl border font-semibold transition-all duration-300 active:scale-95 ${
+                  active
+                    ? 'bg-primary border-primary text-white shadow-lg shadow-primary/25'
+                    : 'bg-surface border-border text-textSecondary hover:text-textPrimary hover:border-surfaceLight'
+                }`}
+              >
+                {episodeLabel(ch)}
+              </Link>
+            )}
+          />
         </section>
       </div>
     </div>

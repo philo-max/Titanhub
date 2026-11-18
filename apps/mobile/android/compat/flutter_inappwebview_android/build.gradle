@@ -1,0 +1,46 @@
+group 'com.pichillilorenzo.flutter_inappwebview_android'
+version '1.0-SNAPSHOT'
+
+apply plugin: 'com.android.library'
+
+def pluginDir = project.ext.originalProjectDir
+
+android {
+    namespace 'com.pichillilorenzo.flutter_inappwebview_android'
+    compileSdk 34
+
+    defaultConfig {
+        minSdkVersion 19
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+
+        vectorDrawables.useSupportLibrary = true
+        consumerProguardFiles new File(pluginDir, 'proguard-rules.pro')
+    }
+    sourceSets {
+        main {
+            manifest.srcFile new File(pluginDir, 'src/main/AndroidManifest.xml')
+            java.srcDirs = [new File(pluginDir, 'src/main/java')]
+            res.srcDirs = [new File(pluginDir, 'src/main/res')]
+            assets.srcDirs = [new File(pluginDir, 'src/main/assets')]
+        }
+    }
+    lint {
+        disable 'InvalidPackage'
+    }
+    buildTypes {
+        debug {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), new File(pluginDir, 'proguard-rules.pro')
+        }
+        release {
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), new File(pluginDir, 'proguard-rules.pro')
+        }
+    }
+    dependencies {
+        implementation 'androidx.webkit:webkit:1.12.0'
+        implementation 'androidx.browser:browser:1.8.0'
+        implementation 'androidx.appcompat:appcompat:1.6.1'
+        implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'
+    }
+}

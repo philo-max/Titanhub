@@ -126,13 +126,23 @@ async function apiChapters(mediaId) {
     }));
   }
   const chapters = [];
-  roads.forEach((road, roadIndex) => road.episodes.forEach((episode, index) => {
-    if (episode.url == null || episode.url === '') return;
-    const variables = { source, episodeUrl: episode.url, episodeName: episode.name, roadName: road.name };
-    const url = config.episodePage ? apiUrl(config.episodePage, variables) : absolutize(String(episode.url));
-    const prefix = roads.length > 1 ? (road.name || '线路' + (roadIndex + 1)) + '·' : '';
-    chapters.push({ id: encodeURIComponent(url), title: prefix + (episode.name || '第 ' + (index + 1) + ' 话'), chapterNo: chapters.length + 1 });
-  }));
+  roads.forEach((road, roadIndex) => {
+    let lineCount = 0;
+    road.episodes.forEach((episode, index) => {
+      if (episode.url == null || episode.url === '') return;
+      const variables = { source, episodeUrl: episode.url, episodeName: episode.name, roadName: road.name };
+      const url = config.episodePage ? apiUrl(config.episodePage, variables) : absolutize(String(episode.url));
+      const lineName = road.name || '线路' + (roadIndex + 1);
+      const prefix = roads.length > 1 ? lineName + '·' : '';
+      lineCount += 1;
+      const chapter = { id: encodeURIComponent(url), title: prefix + (episode.name || '第 ' + (index + 1) + ' 话'), chapterNo: lineCount };
+      if (roads.length > 1) {
+        chapter.lineId = 'line-' + (roadIndex + 1);
+        chapter.lineName = lineName;
+      }
+      chapters.push(chapter);
+    });
+  });
   return chapters;
 }
 `;

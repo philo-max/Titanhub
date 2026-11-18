@@ -3,6 +3,10 @@ import '../../../core/theme/app_theme.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import '../../../core/identity/media_identity.dart';
+import '../../../core/playback/resume_target.dart';
+import '../../../core/router/app_router.dart';
+import '../../../core/sources/local_sources.dart';
 import '../../media/providers/media_providers.dart';
 import '../../media/models/media_models.dart';
 import '../../tracking/sync_provider.dart';
@@ -25,42 +29,129 @@ class NovelReaderScreen extends ConsumerStatefulWidget {
   ConsumerState<NovelReaderScreen> createState() => _NovelReaderScreenState();
 }
 
-class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen> {
+class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen>
+    with WidgetsBindingObserver {
   // Reading preferences
   NovelTheme _theme = NovelTheme.obsidian;
   double _fontSize = 18.0;
   bool _serifFont = true;
   bool _settingsVisible = false;
-  
+
   final ScrollController _scrollController = ScrollController();
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  
+
+  late final String _mediaType;
+  late final SyncService _syncService;
+  String? _chapterTitle;
+  double _restoredProgress = 0.0;
+  double _lastSavedProgress = -1.0;
+  bool _restored = false;
+  bool _progressLoaded = false;
+  bool _userScrolled = false;
+  bool _disposed = false;
+
+  MediaIdentity get _identity => MediaIdentity(
+        pluginId: widget.pluginId,
+        mediaType: _mediaType,
+        mediaId: widget.mediaId,
+      );
+
   @override
   void initState() {
     super.initState();
+    _syncService = ref.read(syncServiceProvider);
+    WidgetsBinding.instance.addObserver(this);
+    _mediaType = resolveMediaType(
+      types: ref.read(sourceByIdProvider(widget.pluginId))?.types,
+      mediaId: widget.mediaId,
+    );
     _scrollController.addListener(_onScroll);
+    _loadSavedProgress();
+  }
+
+  Future<void> _loadSavedProgress() async {
+    try {
+      final saved = await ref.read(syncServiceProvider).loadProgress(_identity);
+      if (!mounted || saved == null) return;
+      if (!isSameChapter(saved.chapterId, widget.chapterId)) return;
+      final progress = restoredNovelProgress(saved.progress);
+      if (progress > 0 && !_userScrolled) {
+        setState(() {
+          _restoredProgress = progress;
+        });
+      }
+    } finally {
+      _progressLoaded = true;
+    }
+  }
+
+  bool _onScrollStart(ScrollStartNotification notification) {
+    if (notification.dragDetails != null) {
+      _userScrolled = true;
+    }
+    return false;
+  }
+
+  void _restoreScroll() {
+    if (_restored || _userScrolled || _restoredProgress <= 0) return;
+    _restored = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _userScrolled || !_scrollController.hasClients) return;
+      final max = _scrollController.position.maxScrollExtent;
+      _scrollController.jumpTo((_restoredProgress * max).clamp(0.0, max));
+    });
   }
 
   void _onScroll() {
     if (!_scrollController.hasClients) return;
     final maxScroll = _scrollController.position.maxScrollExtent;
     final currentScroll = _scrollController.offset;
-    if (maxScroll > 0 && currentScroll > 0) {
-      final progress = (currentScroll / maxScroll).clamp(0.0, 1.0);
-      ref.read(syncServiceProvider).saveProgress(
-        mediaId: widget.mediaId,
-        pluginId: widget.pluginId,
-        mediaType: 'novel',
-        chapterNo: 1, // You could get this from chapters list
-        chapterId: widget.chapterId,
-        progress: progress,
-        status: 'watching',
-      );
+    if (maxScroll <= 0 || currentScroll <= 0) return;
+    final progress = (currentScroll / maxScroll).clamp(0.0, 1.0);
+    if ((progress - _lastSavedProgress).abs() < 0.01) return;
+    _persistProgress(progress);
+  }
+
+  void _saveProgress() {
+    if (_disposed) return;
+    if (!_userScrolled && (!_progressLoaded || (_restoredProgress > 0 && !_restored))) return;
+    if (_scrollController.hasClients) {
+      final maxScroll = _scrollController.position.maxScrollExtent;
+      if (maxScroll > 0) {
+        _persistProgress((_scrollController.offset / maxScroll).clamp(0.0, 1.0));
+        return;
+      }
+    }
+    _persistProgress(_lastSavedProgress.clamp(0.0, 1.0));
+  }
+
+  void _persistProgress(double progress) {
+    _lastSavedProgress = progress;
+    try {
+      _syncService.saveProgress(
+            pluginId: widget.pluginId,
+            mediaType: _mediaType,
+            mediaId: widget.mediaId,
+            chapterNo: 0,
+            chapterId: widget.chapterId,
+            chapterTitle: _chapterTitle,
+            progress: progress,
+          );
+    } catch (_) {}
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      _saveProgress();
     }
   }
 
   @override
   void dispose() {
+    _saveProgress();
+    _disposed = true;
+    WidgetsBinding.instance.removeObserver(this);
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     super.dispose();
@@ -106,85 +197,118 @@ class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen> {
       pluginId: widget.pluginId,
       mediaId: widget.mediaId
     )));
+    for (final chapter in chaptersAsync.value ?? <Chapter>[]) {
+      if (chapter.id == widget.chapterId) {
+        _chapterTitle = chapter.title;
+        break;
+      }
+    }
 
     final config = _themeConfigs[_theme]!;
 
-    return Scaffold(
-      key: _scaffoldKey,
-      backgroundColor: config.bg,
-      endDrawer: _buildChaptersDrawer(chaptersAsync.value ?? []),
-      appBar: AppBar(
-        title: Text(
-          widget.chapterId,
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.bold,
-            color: config.text,
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _saveProgress();
+        if (context.canPop()) {
+          context.pop();
+        }
+      },
+      child: Scaffold(
+        key: _scaffoldKey,
+        backgroundColor: config.bg,
+        endDrawer: _buildChaptersDrawer(chaptersAsync.value ?? []),
+        appBar: AppBar(
+          title: Text(
+            _chapterTitle ?? '小说阅读',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: config.text,
+            ),
           ),
-        ),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: Icon(LucideIcons.arrowLeft, color: config.text),
-          onPressed: () => context.pop(),
-        ),
-        actions: [
-          IconButton(
-            icon: Icon(LucideIcons.type, color: config.text),
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          leading: IconButton(
+            icon: Icon(LucideIcons.arrowLeft, color: config.text),
+            tooltip: '返回',
             onPressed: () {
-              setState(() {
-                _settingsVisible = !_settingsVisible;
-              });
+              _saveProgress();
+              context.pop();
             },
           ),
-          IconButton(
-            icon: Icon(LucideIcons.menu, color: config.text),
-            onPressed: () => _scaffoldKey.currentState?.openEndDrawer(),
-          ),
-        ],
-      ),
-      body: Stack(
-        children: [
-          // 1. Scrollable Text viewport
-          contentAsync.when(
-            data: (content) {
-              if (content.trim().isEmpty) {
-                return const Center(
-                  child: Text('未解析出小说正文内容。', style: TextStyle(color: AppTheme.textSecondary)),
-                );
-              }
+          actions: [
+            IconButton(
+              icon: Icon(LucideIcons.type, color: config.text),
+              tooltip: '阅读设置',
+              onPressed: () {
+                setState(() {
+                  _settingsVisible = !_settingsVisible;
+                });
+              },
+            ),
+            IconButton(
+              icon: Icon(LucideIcons.menu, color: config.text),
+              tooltip: '章节目录',
+              onPressed: () => _scaffoldKey.currentState?.openEndDrawer(),
+            ),
+          ],
+        ),
+        body: Stack(
+          children: [
+            // 1. Scrollable Text viewport
+            contentAsync.when(
+              data: (content) {
+                if (content.trim().isEmpty) {
+                  return const Center(
+                    child: Text('未解析出小说正文内容。', style: TextStyle(color: AppTheme.textSecondary)),
+                  );
+                }
 
-              // Split text by paragraphs
-              final paragraphs = content
-                  .split('\n\n')
-                  .where((p) => p.trim().isNotEmpty)
-                  .toList();
+                // Split text by paragraphs
+                final paragraphs = content
+                    .split('\n\n')
+                    .where((p) => p.trim().isNotEmpty)
+                    .toList();
 
-              return SingleChildScrollView(
-                controller: _scrollController,
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 120),
-                child: SelectionArea(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: paragraphs.map((p) {
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 18.0),
-                        child: Text(
-                          p.trim(),
-                          textAlign: TextAlign.justify,
-                          style: TextStyle(
-                            color: config.text,
-                            fontSize: _fontSize,
-                            fontFamily: _serifFont ? 'serif' : 'sans-serif',
-                            height: 1.8,
-                          ),
-                        ),
-                      );
-                    }).toList(),
+                _restoreScroll();
+
+                return NotificationListener<ScrollStartNotification>(
+                  onNotification: _onScrollStart,
+                  child: SingleChildScrollView(
+                    controller: _scrollController,
+                    padding: EdgeInsets.fromLTRB(
+                      20,
+                      16,
+                      20,
+                      120 + MediaQuery.paddingOf(context).bottom,
+                    ),
+                    child: SelectionArea(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: paragraphs.map((p) {
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 18.0),
+                            child: Text(
+                              p.trim(),
+                              textAlign: TextAlign.justify,
+                              style: TextStyle(
+                                color: config.text,
+                                fontSize: _fontSize,
+                                fontFamily: _serifFont ? 'serif' : 'sans-serif',
+                                height: 1.8,
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
                   ),
-                ),
-              );
-            },
+                );
+              },
             loading: () => const Center(
               child: CircularProgressIndicator(color: AppTheme.primary),
             ),
@@ -217,7 +341,7 @@ class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen> {
             Positioned(
               left: 16,
               right: 16,
-              bottom: 16,
+              bottom: 16 + MediaQuery.paddingOf(context).bottom,
               child: Material(
                 color: AppTheme.surface, // Deep Slate 900
                 elevation: 10,
@@ -228,7 +352,12 @@ class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen> {
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(color: AppTheme.surfaceLight),
                   ),
-                  child: Column(
+                  child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.sizeOf(context).height * 0.62,
+                  ),
+                  child: SingleChildScrollView(
+                    child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -339,10 +468,13 @@ class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen> {
                       ),
                     ],
                   ),
+                  ),
                 ),
               ),
             ),
+          ),
         ],
+        ),
       ),
     );
   }
@@ -400,9 +532,15 @@ class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen> {
                         ),
                       ),
                       onTap: () {
-                        context.pop(); // Close drawer
+                        _saveProgress();
+                        Navigator.of(context).pop();
                         context.pushReplacement(
-                          '/novel-read/${widget.pluginId}/${widget.mediaId}/${ch.id}',
+                          readLocation(
+                            route: 'novel-read',
+                            pluginId: widget.pluginId,
+                            mediaId: widget.mediaId,
+                            chapterId: ch.id,
+                          ),
                         );
                       },
                     ),

@@ -12,6 +12,8 @@ import {
 import { ArrowLeft, BookOpen, Calendar, User, HelpCircle, Loader2 } from 'lucide-react';
 import { API_BASE, recordMediaView } from '@/lib/config';
 import { playbackCache } from '@/lib/playbackCache';
+import { findMangaContinueChapter } from '@/lib/resume-position';
+import { useSyncStore } from '@/stores/syncStore';
 
 interface Params {
   pluginId: string;
@@ -45,6 +47,13 @@ export default function MangaDetailPage({ params }: { params: Promise<Params> })
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const trackingList = useSyncStore((state) => state.trackingList);
+  const pullTracking = useSyncStore((state) => state.pullTracking);
+  const resumeChapter = findMangaContinueChapter(trackingList, { pluginId, mediaId }, chapters);
+
+  useEffect(() => {
+    void pullTracking();
+  }, [pullTracking]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -219,6 +228,16 @@ export default function MangaDetailPage({ params }: { params: Promise<Params> })
               </p>
             </div>
 
+            {resumeChapter && (
+              <button
+                onClick={(event) => handleChapterClick(event, resumeChapter.id)}
+                className="flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-white mb-6"
+              >
+                <BookOpen className="h-4 w-4" />
+                继续阅读：{resumeChapter.title}
+              </button>
+            )}
+
             {/* Author / Last update details card */}
             <div className="animate-fade-in grid grid-cols-2 gap-4 border-t border-border pt-6">
               <div className="flex items-center space-x-3 text-textSecondary">
@@ -263,7 +282,7 @@ export default function MangaDetailPage({ params }: { params: Promise<Params> })
 
           {chapters.length === 0 ? (
             <div className="text-center py-12 text-textSecondary text-sm">
-              暂无可用章节 content。
+              当前来源暂无可供应用内阅读的章节，请尝试其他来源。
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">

@@ -43,6 +43,9 @@ describe('Kazumi JSON APIs', () => {
       'https://anime.example/anime/42/play/0', 'https://anime.example/anime/42/play/9',
     ]);
     expect(chapters.map((chapter: any) => chapter.title)).toEqual(['A·一', 'B·一']);
+    expect(chapters.map((chapter: any) => [chapter.lineId, chapter.lineName, chapter.chapterNo])).toEqual([
+      ['line-1', 'A', 1], ['line-2', 'B', 1],
+    ]);
   });
 
   it('encodes JSON requests once and resolves optional covers and source templates', async () => {
@@ -65,6 +68,9 @@ describe('Kazumi JSON APIs', () => {
     const chapters = await plugin.getChapters('42');
     expect(chapters).toHaveLength(3);
     expect(chapters[0].title).toBe('A·第1集');
+    expect(chapters.map((chapter: any) => [chapter.title, chapter.lineId, chapter.lineName, chapter.chapterNo])).toEqual([
+      ['A·第1集', 'line-1', 'A', 1], ['A·第2集', 'line-1', 'A', 2], ['B·第1集', 'line-2', 'B', 1],
+    ]);
     expect(await plugin.getVideoUrl(chapters[0].id)).toEqual([{ quality: '默认', url: 'https://cdn.example/a.m3u8?token=x$y' }]);
     expect(fetch).toHaveBeenCalledTimes(1);
   });
@@ -73,7 +79,7 @@ describe('Kazumi JSON APIs', () => {
     const rule = { ...baseRule, chapterApiConfig: { ...baseRule.chapterApiConfig, roadsPath: '$.data', roadNamePath: '', episodesPath: '$.episodes[*]' } } as KazumiRule;
     const { plugin } = load(rule, [{ list: [] }, { data: { episodes: [{ title: '一', id: 1 }] } }]);
     expect(await plugin.search('missing')).toEqual([]);
-    expect((await plugin.getChapters('42'))[0].title).toBe('一');
+    expect(await plugin.getChapters('42')).toEqual([{ id: encodeURIComponent('https://anime.example/anime/42/play/1'), title: '一', chapterNo: 1 }]);
   });
 
   it('loads details in a new sandbox without resolving a numeric API ID as a website URL', async () => {
