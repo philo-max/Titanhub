@@ -84,4 +84,25 @@ void main() {
     expect(find.text('来源配置'), findsOneWidget);
     expect(find.textContaining('Kazumi'), findsNothing);
   });
+
+  testWidgets('动漫与漫画分类均支持单选来源，切换分类后重置为全部来源', (tester) async {
+    await _pump(tester, _EmptyRunner());
+    expect(find.byKey(const Key('search-source-all')), findsOneWidget);
+    expect(find.byKey(const Key('search-source-bangumi')), findsOneWidget);
+    expect(find.byKey(const Key('search-source-mangadex')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('search-type-anime')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('search-source-bangumi')), findsOneWidget);
+    expect(find.byKey(const Key('search-source-mangadex')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('search-source-kazumi-7sefun')));
+    await tester.pumpAndSettle();
+    expect(find.text('本机来源：七色番动漫'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('search-type-manga')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('search-source-mangadex')), findsOneWidget);
+    expect(find.text('本机来源：MangaDex 漫画'), findsOneWidget);
+  });
 }

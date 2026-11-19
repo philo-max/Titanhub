@@ -31,6 +31,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
   void _selectType(MediaTypeFilter filter) {
     ref.read(selectedMediaTypeProvider.notifier).state = filter;
+    ref.read(selectedSourceIdProvider.notifier).state = null;
+  }
+
+  void _selectSource(String? sourceId) {
+    final current = ref.read(selectedSourceIdProvider);
+    ref.read(selectedSourceIdProvider.notifier).state = current == sourceId ? null : sourceId;
   }
 
   void _showSourcesSheet() {
@@ -199,7 +205,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     final searchResults =
         ref.watch(searchMediaProvider((query: _searchQuery, type: selectedType)));
     final activeSources = ref.watch(activeSourcesProvider);
+    final categorySources = ref.watch(typeSourcesProvider(selectedType));
     final typeSources = ref.watch(searchSourcesProvider(selectedType));
+    final selectedSourceId = ref.watch(selectedSourceIdProvider);
+    final effectiveSelectedSourceId = categorySources.any((s) => s.id == selectedSourceId) ? selectedSourceId : null;
     final remoteEnabled = ref.watch(remoteEnabledProvider);
 
     return Scaffold(
@@ -329,6 +338,37 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                     ],
                   ),
                   const SizedBox(height: 8),
+                  if (categorySources.isNotEmpty) ...[
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: ChoiceChip(
+                              key: const Key('search-source-all'),
+                              label: Text('全部来源 (${categorySources.length})'),
+                              selected: effectiveSelectedSourceId == null,
+                              selectedColor: AppTheme.primary.withValues(alpha: 0.25),
+                              onSelected: (_) => ref.read(selectedSourceIdProvider.notifier).state = null,
+                            ),
+                          ),
+                          for (final source in categorySources)
+                            Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: ChoiceChip(
+                                key: Key('search-source-${source.id}'),
+                                label: Text(source.name),
+                                selected: effectiveSelectedSourceId == source.id,
+                                selectedColor: AppTheme.primary.withValues(alpha: 0.25),
+                                onSelected: (_) => _selectSource(source.id),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
                   Text(
                     typeSources.isNotEmpty
                         ? '本机来源：${typeSources.map((s) => s.name).join('、')}'

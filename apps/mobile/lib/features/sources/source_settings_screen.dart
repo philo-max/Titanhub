@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_inappwebview_platform_interface/flutter_inappwebview_platform_interface.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../core/sandbox/local_plugin_runner.dart';
 import '../../core/sources/local_sources.dart';
@@ -145,7 +148,36 @@ class _SourceSettingsScreenState extends ConsumerState<SourceSettingsScreen> {
   }
 
   bool _hasLogin(VeneraSourceInfo info) =>
-      info.canPasswordLogin || info.hasWebLogin || info.hasCookieLogin;
+      info.canPasswordLogin ||
+      info.hasWebLogin ||
+      info.hasCookieLogin ||
+      _validRegisterUri(info.registerWebsite) != null;
+
+  Uri? _validRegisterUri(String raw) {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) return null;
+    final uri = Uri.tryParse(trimmed);
+    if (uri == null || !uri.hasScheme || uri.host.isEmpty) return null;
+    if (uri.scheme != 'http' && uri.scheme != 'https') return null;
+    return uri;
+  }
+
+  void _openRegisterPage(Uri uri) {
+    final name = ref.read(sourceByIdProvider(widget.pluginId))?.name ?? '来源';
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => _SourceRegisterWebViewScreen(title: '$name 注册', initialUrl: uri.toString()),
+      ),
+    );
+  }
+
+  Future<void> _copyRegisterUrl(String url) async {
+    await Clipboard.setData(ClipboardData(text: url));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('已复制注册网址')),
+    );
+  }
 
   TextEditingController _inputFor(VeneraSettingItem item) => _inputs.putIfAbsent(
         item.key,
@@ -241,6 +273,7 @@ class _SourceSettingsScreenState extends ConsumerState<SourceSettingsScreen> {
   }
 
   Widget _buildLogin(VeneraSourceInfo info) {
+    final registerUri = _validRegisterUri(info.registerWebsite);
     return Container(
       margin: const EdgeInsets.only(top: 12),
       padding: const EdgeInsets.all(16),
@@ -253,6 +286,35 @@ class _SourceSettingsScreenState extends ConsumerState<SourceSettingsScreen> {
           const SizedBox(height: 4),
           const Text('口令仅加密保存在本机，不会写入日志或同步。',
               style: TextStyle(color: AppTheme.textTertiary, fontSize: 11)),
+          if (registerUri != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              '注册地址：${registerUri.toString()}',
+              key: const Key('login-register-url'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+            ),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                OutlinedButton.icon(
+                  key: const Key('login-register-open'),
+                  onPressed: _working ? null : () => _openRegisterPage(registerUri),
+                  icon: const Icon(LucideIcons.externalLink, size: 15),
+                  label: const Text('去注册'),
+                ),
+                TextButton.icon(
+                  key: const Key('login-register-copy'),
+                  onPressed: _working ? null : () => _copyRegisterUrl(registerUri.toString()),
+                  icon: const Icon(LucideIcons.copy, size: 15),
+                  label: const Text('复制网址'),
+                ),
+              ],
+            ),
+          ],
           if (info.canPasswordLogin && info.isLogged) ...[
             const SizedBox(height: 8),
             const Text('当前已登录', key: Key('login-state'), style: TextStyle(color: AppTheme.success)),
@@ -297,6 +359,26 @@ class _SourceSettingsScreenState extends ConsumerState<SourceSettingsScreen> {
             ),
         ],
       ),
+    );
+  }
+}
+
+class _SourceRegisterWebViewScreen extends StatelessWidget {
+  const _SourceRegisterWebViewScreen({required this.title, required this.initialUrl});
+
+  final String title;
+  final String initialUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text(title)),
+      body: PlatformInAppWebViewWidget(
+        PlatformInAppWebViewWidgetCreationParams(
+          initialUrlRequest: URLRequest(url: WebUri(initialUrl)),
+          initialSettings: InAppWebViewSettings(javaScriptEnabled: true),
+        ),
+      ).build(context),
     );
   }
 }

@@ -111,10 +111,11 @@ aggregate.get('/home', async (c) => {
 
   const page = Math.max(1, Number(c.req.query('page')) || 1);
   const pageSize = Math.min(Math.max(1, Number(c.req.query('pageSize')) || 20), 100);
+  const pluginId = c.req.query('pluginId')?.trim();
 
   try {
     const all = await getPlugins();
-    const eligible = all.filter((p) => isLiveSource(p) && p.types.includes(type));
+    const eligible = all.filter((p) => isLiveSource(p) && p.types.includes(type) && (!pluginId || p.id === pluginId));
 
     const perPlugin = await exploreSources(eligible, type);
     const allItems = groupMediaItems(perPlugin.map(result => result.items));
@@ -144,6 +145,7 @@ aggregate.get('/home', async (c) => {
 aggregate.get('/search', async (c) => {
   const q = (c.req.query('q') || '').trim();
   const type = c.req.query('type') as MediaType | undefined;
+  const pluginId = c.req.query('pluginId')?.trim();
   if (!q) {
     return c.json({ error: 'Query parameter "q" is required.' }, 400);
   }
@@ -156,7 +158,7 @@ aggregate.get('/search', async (c) => {
 
   try {
     const all = await getPlugins();
-    const eligible = all.filter((p) => isLiveSource(p) && (!type || p.types.includes(type)));
+    const eligible = all.filter((p) => isLiveSource(p) && (!type || p.types.includes(type)) && (!pluginId || p.id === pluginId));
 
     const perPlugin = await Promise.all(
       eligible.map(async (plugin) => {

@@ -140,6 +140,17 @@ void main() {
     expect(find.textContaining('无法读取来源设置'), findsOneWidget);
   });
 
+  testWidgets('支持 registerWebsite 的来源显示去注册与复制网址按钮，忽略非法 scheme', (tester) async {
+    await pump(tester, infoOf(canPasswordLogin: true, registerWebsite: 'https://example.com/register'));
+    expect(find.byKey(const Key('login-register-url')), findsOneWidget);
+    expect(find.byKey(const Key('login-register-open')), findsOneWidget);
+    expect(find.byKey(const Key('login-register-copy')), findsOneWidget);
+
+    await pump(tester, infoOf(canPasswordLogin: true, registerWebsite: 'javascript:alert(1)'));
+    expect(find.byKey(const Key('login-register-url')), findsNothing);
+    expect(find.byKey(const Key('login-register-open')), findsNothing);
+  });
+
   for (final size in [const Size(320, 568), const Size(390, 844)]) {
     for (final brightness in Brightness.values) {
       testWidgets('设置页在 ${size.width.toInt()} 宽、$brightness 下无溢出', (tester) async {

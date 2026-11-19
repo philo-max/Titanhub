@@ -128,6 +128,7 @@ VeneraSourceInfo infoOf({
   bool hasWebLogin = false,
   bool hasCookieLogin = false,
   bool isLogged = false,
+  String registerWebsite = '',
 }) =>
     VeneraSourceInfo(
       hasSearch: true,
@@ -137,7 +138,7 @@ VeneraSourceInfo infoOf({
       hasWebLogin: hasWebLogin,
       hasCookieLogin: hasCookieLogin,
       isLogged: isLogged,
-      registerWebsite: '',
+      registerWebsite: registerWebsite,
     );
 
 Future<ProviderContainer> pumpScreen(

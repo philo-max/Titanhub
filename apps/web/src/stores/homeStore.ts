@@ -25,6 +25,7 @@ export interface AggregationSource {
 
 interface HomeState {
   activeCategory: Category;
+  selectedSourceId: string | null;
   items: AggregatedMediaItem[];
   loading: boolean;
   loadingMore: boolean;
@@ -34,6 +35,7 @@ interface HomeState {
   hasMore: boolean;
   cache: Partial<Record<Category, AggregatedMediaItem[]>>;
   setActiveCategory: (category: Category) => void;
+  setSelectedSourceId: (sourceId: string | null) => void;
   fetchCategory: (category: Category, forceRefresh?: boolean) => Promise<void>;
   loadMore: () => Promise<void>;
   loadMockFallback: () => void;
@@ -44,6 +46,7 @@ let latestRequest = 0;
 
 export const useHomeStore = create<HomeState>((set, get) => ({
   activeCategory: 'anime',
+  selectedSourceId: null,
   items: [],
   loading: false,
   loadingMore: false,
@@ -54,13 +57,20 @@ export const useHomeStore = create<HomeState>((set, get) => ({
   cache: {},
 
   setActiveCategory: (category) => {
-    set({ activeCategory: category, error: null });
+    set({ activeCategory: category, selectedSourceId: null, error: null });
     get().fetchCategory(category);
+  },
+
+  setSelectedSourceId: (sourceId) => {
+    const next = get().selectedSourceId === sourceId ? null : sourceId;
+    set({ selectedSourceId: next, error: null });
+    get().fetchCategory(get().activeCategory, true);
   },
 
   fetchCategory: async (category, forceRefresh = false) => {
     const request = ++latestRequest;
-    const cached = get().cache[category];
+    const selectedSourceId = get().selectedSourceId;
+    const cached = selectedSourceId ? undefined : get().cache[category];
     if (cached && !forceRefresh) {
       set({ items: cached, sources: [], loading: false, error: null, page: 1, hasMore: false });
       return;
@@ -68,11 +78,17 @@ export const useHomeStore = create<HomeState>((set, get) => ({
 
     set({ items: [], sources: [], loading: true, loadingMore: false, error: null, page: 1, hasMore: false });
     try {
+      const params = new URLSearchParams({
+        type: category,
+        page: '1',
+        pageSize: String(PAGE_SIZE),
+      });
+      if (selectedSourceId) params.set('pluginId', selectedSourceId);
       const res = await fetch(
-        `${API_BASE}/api/aggregate/home?type=${category}&page=1&pageSize=${PAGE_SIZE}`
+        `${API_BASE}/api/aggregate/home?${params.toString()}`
       );
       const data = await res.json();
-      if (request !== latestRequest || get().activeCategory !== category) return;
+      if (request !== latestRequest || get().activeCategory !== category || get().selectedSourceId !== selectedSourceId) return;
       if (!res.ok) throw new Error(data.error || `聚合服务请求失败（HTTP ${res.status}）`);
       if (!Array.isArray(data.items)) throw new Error('聚合服务响应格式错误，请重试。');
       set({ sources: Array.isArray(data.sources) ? data.sources : [] });
@@ -83,7 +99,7 @@ export const useHomeStore = create<HomeState>((set, get) => ({
           error: null,
           page: 1,
           hasMore: data.hasMore === true,
-          cache: { ...state.cache, [category]: data.items },
+          cache: selectedSourceId ? state.cache : { ...state.cache, [category]: data.items },
         }));
       } else {
         throw new Error(data.error || (data.emptyReason === 'no_sources'
@@ -102,18 +118,24 @@ export const useHomeStore = create<HomeState>((set, get) => ({
   },
 
   loadMore: async () => {
-    const { activeCategory, page, loadingMore, hasMore, items } = get();
+    const { activeCategory, selectedSourceId, page, loadingMore, hasMore, items } = get();
     if (loadingMore || !hasMore) return;
 
     set({ loadingMore: true });
     const nextPage = page + 1;
     try {
+      const params = new URLSearchParams({
+        type: activeCategory,
+        page: String(nextPage),
+        pageSize: String(PAGE_SIZE),
+      });
+      if (selectedSourceId) params.set('pluginId', selectedSourceId);
       const res = await fetch(
-        `${API_BASE}/api/aggregate/home?type=${activeCategory}&page=${nextPage}&pageSize=${PAGE_SIZE}`
+        `${API_BASE}/api/aggregate/home?${params.toString()}`
       );
       if (!res.ok) throw new Error(`Server returned HTTP ${res.status}`);
       const data = await res.json();
-      if (get().activeCategory !== activeCategory) return;
+      if (get().activeCategory !== activeCategory || get().selectedSourceId !== selectedSourceId) return;
       if (Array.isArray(data.items)) {
         set({
           items: [...items, ...data.items],

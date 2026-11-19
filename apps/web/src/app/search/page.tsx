@@ -114,8 +114,10 @@ function SearchPageInner() {
   const searchParams = useSearchParams();
   const q = searchParams.get('q') || '';
   const type = searchParams.get('type') || '';
+  const pluginId = searchParams.get('pluginId') || '';
 
   const [keyword, setKeyword] = useState(q);
+  const [availableSources, setAvailableSources] = useState<{ id: string; name: string; types: string[]; isActive: boolean }[]>([]);
   const [items, setItems] = useState<AggregatedMediaItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -131,6 +133,19 @@ function SearchPageInner() {
   const [visualError, setVisualError] = useState('');
   
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${API_BASE}/api/plugins`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (!cancelled && Array.isArray(data.plugins)) {
+          setAvailableSources(data.plugins);
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     setKeyword(q);
@@ -149,6 +164,7 @@ function SearchPageInner() {
       try {
         const requestParams = new URLSearchParams({ q });
         if (type) requestParams.set('type', type);
+        if (pluginId) requestParams.set('pluginId', pluginId);
         const res = await fetch(
           `${API_BASE}/api/aggregate/search?${requestParams.toString()}`
         );
@@ -174,14 +190,15 @@ function SearchPageInner() {
     return () => {
       cancelled = true;
     };
-  }, [q, type]);
+  }, [q, type, pluginId]);
 
-  const navigate = (kw: string, nextType: string) => {
+  const navigate = (kw: string, nextType: string, nextPluginId = '') => {
     const trimmed = kw.trim();
     if (!trimmed) return;
-    router.replace(
-      `/search?q=${encodeURIComponent(trimmed)}${nextType ? `&type=${nextType}` : ''}`
-    );
+    const params = new URLSearchParams({ q: trimmed });
+    if (nextType) params.set('type', nextType);
+    if (nextPluginId) params.set('pluginId', nextPluginId);
+    router.replace(`/search?${params.toString()}`);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -416,7 +433,7 @@ function SearchPageInner() {
             return (
               <button
                 key={tab.label}
-                onClick={() => (q ? navigate(q, tab.value) : undefined)}
+                onClick={() => (q ? navigate(q, tab.value, '') : undefined)}
                 className={`text-xs px-4 py-2 rounded-pill border font-medium transition-all duration-normal ease-out cursor-pointer ${
                   isActive
                     ? 'bg-primary border-primary text-white shadow-card'
@@ -428,6 +445,42 @@ function SearchPageInner() {
             );
           })}
         </div>
+
+        {(() => {
+          const matchingSources = availableSources.filter(
+            (s) => s.isActive && (!type || (Array.isArray(s.types) && s.types.includes(type)))
+          );
+          if (matchingSources.length === 0) return null;
+          return (
+            <div className="flex flex-wrap gap-2 mt-3">
+              <button
+                type="button"
+                onClick={() => (q ? navigate(q, type, '') : undefined)}
+                className={`text-xs px-3 py-1.5 rounded-pill border transition-all cursor-pointer ${
+                  !pluginId
+                    ? 'bg-primary/20 border-primary text-primary font-semibold'
+                    : 'bg-surface/60 border-border text-textSecondary hover:text-textPrimary'
+                }`}
+              >
+                全部来源 ({matchingSources.length})
+              </button>
+              {matchingSources.map((source) => (
+                <button
+                  key={source.id}
+                  type="button"
+                  onClick={() => (q ? navigate(q, type, pluginId === source.id ? '' : source.id) : undefined)}
+                  className={`text-xs px-3 py-1.5 rounded-pill border transition-all cursor-pointer ${
+                    pluginId === source.id
+                      ? 'bg-primary/20 border-primary text-primary font-semibold'
+                      : 'bg-surface/60 border-border text-textSecondary hover:text-textPrimary'
+                  }`}
+                >
+                  {source.name}
+                </button>
+              ))}
+            </div>
+          );
+        })()}
 
         <div className="mt-10">
           {loading && items.length === 0 && (

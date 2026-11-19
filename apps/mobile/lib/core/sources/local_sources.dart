@@ -111,11 +111,24 @@ enum MediaTypeFilter {
 
 final selectedMediaTypeProvider = StateProvider<MediaTypeFilter>((ref) => MediaTypeFilter.all);
 
-final searchSourcesProvider = Provider.family<List<MediaSource>, MediaTypeFilter>((ref, filter) {
+final selectedSourceIdProvider = StateProvider<String?>((ref) => null);
+
+final typeSourcesProvider = Provider.family<List<MediaSource>, MediaTypeFilter>((ref, filter) {
   return [
     for (final source in ref.watch(activeSourcesProvider))
       if (filter.matches(source)) source,
   ];
+});
+
+final searchSourcesProvider = Provider.family<List<MediaSource>, MediaTypeFilter>((ref, filter) {
+  final sources = ref.watch(typeSourcesProvider(filter));
+  final selectedId = ref.watch(selectedSourceIdProvider);
+  if (selectedId == null) return sources;
+  final matched = [
+    for (final source in sources)
+      if (source.id == selectedId) source,
+  ];
+  return matched.isNotEmpty ? matched : sources;
 });
 
 final remoteEnabledProvider = StateProvider<bool>((ref) => false);
