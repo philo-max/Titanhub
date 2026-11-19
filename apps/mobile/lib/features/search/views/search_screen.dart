@@ -22,21 +22,29 @@ class SearchScreen extends ConsumerStatefulWidget {
 class _SearchScreenState extends ConsumerState<SearchScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  String? _resultSourceFilter;
 
   void _performSearch() {
     setState(() {
       _searchQuery = _searchController.text.trim();
+      _resultSourceFilter = null;
     });
   }
 
   void _selectType(MediaTypeFilter filter) {
     ref.read(selectedMediaTypeProvider.notifier).state = filter;
     ref.read(selectedSourceIdProvider.notifier).state = null;
+    setState(() {
+      _resultSourceFilter = null;
+    });
   }
 
   void _selectSource(String? sourceId) {
     final current = ref.read(selectedSourceIdProvider);
     ref.read(selectedSourceIdProvider.notifier).state = current == sourceId ? null : sourceId;
+    setState(() {
+      _resultSourceFilter = null;
+    });
   }
 
   void _showSourcesSheet() {
@@ -370,11 +378,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                     const SizedBox(height: 8),
                   ],
                   Text(
-                    typeSources.isNotEmpty
-                        ? '本机来源：${typeSources.map((s) => s.name).join('、')}'
-                        : selectedType == MediaTypeFilter.all
-                            ? '当前没有启用任何本机来源，点右上角选择来源。'
-                            : '「${selectedType.label}」分类没有已启用的本机来源，点右上角选择来源。',
+                    typeSources.length == 1
+                        ? '本机来源：${typeSources.single.name}'
+                        : typeSources.isNotEmpty
+                            ? '当前区域已启用 ${typeSources.length} 个本机来源，可在上方单选'
+                            : selectedType == MediaTypeFilter.all
+                                ? '当前没有启用任何本机来源，点右上角选择来源。'
+                                : '「${selectedType.label}」分类没有已启用的本机来源，点右上角选择来源。',
                     style: const TextStyle(color: AppTheme.textTertiary, fontSize: 11),
                   ),
                   const SizedBox(height: 16),
@@ -470,12 +480,88 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       );
     }
 
+    final sourceCounts = <String, ({String name, int count})>{};
+    for (final item in outcome.items) {
+      final id = item.pluginId ?? '';
+      if (id.isEmpty) continue;
+      final prev = sourceCounts[id];
+      sourceCounts[id] = (name: item.pluginName ?? id, count: (prev?.count ?? 0) + 1);
+    }
+    final activeFilter = _resultSourceFilter != null && sourceCounts.containsKey(_resultSourceFilter)
+        ? _resultSourceFilter
+        : null;
+    final visibleItems = activeFilter == null
+        ? outcome.items
+        : outcome.items.where((item) => item.pluginId == activeFilter).toList();
+
     return SliverPadding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       sliver: SliverList(
         delegate: SliverChildBuilderDelegate(
           (context, index) {
-            if (index == outcome.items.length) {
+            if (index == 0) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(LucideIcons.listFilter, size: 14, color: AppTheme.primary),
+                        const SizedBox(width: 6),
+                        Text(
+                          activeFilter == null
+                              ? '共 ${outcome.items.length} 条结果 · 点击来源可单独筛选'
+                              : '${sourceCounts[activeFilter]!.name} · ${visibleItems.length} 条结果',
+                          style: const TextStyle(
+                            color: AppTheme.textSecondary,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (sourceCounts.length > 1) ...[
+                      const SizedBox(height: 10),
+                      SingleChildScrollView(
+                        key: const Key('result-source-filter-bar'),
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: ChoiceChip(
+                                key: const Key('result-source-all'),
+                                label: Text('全部结果 (${outcome.items.length})'),
+                                selected: activeFilter == null,
+                                selectedColor: AppTheme.primary.withValues(alpha: 0.25),
+                                onSelected: (_) => setState(() => _resultSourceFilter = null),
+                              ),
+                            ),
+                            for (final entry in sourceCounts.entries)
+                              Padding(
+                                padding: const EdgeInsets.only(right: 8),
+                                child: ChoiceChip(
+                                  key: Key('result-source-${entry.key}'),
+                                  label: Text('${entry.value.name} (${entry.value.count})'),
+                                  selected: activeFilter == entry.key,
+                                  selectedColor: AppTheme.primary.withValues(alpha: 0.25),
+                                  onSelected: (_) => setState(() {
+                                    _resultSourceFilter =
+                                        _resultSourceFilter == entry.key ? null : entry.key;
+                                  }),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              );
+            }
+            final itemIndex = index - 1;
+            if (itemIndex == visibleItems.length) {
               return Padding(
                 padding: const EdgeInsets.only(bottom: 24),
                 child: Column(
@@ -493,16 +579,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                 ),
               );
             }
-            final item = outcome.items[index];
+            final item = visibleItems[itemIndex];
             return Container(
-              margin: const EdgeInsets.only(bottom: 16),
+              margin: const EdgeInsets.only(bottom: 14),
               decoration: BoxDecoration(
                 color: AppTheme.surface,
                 borderRadius: BorderRadius.circular(AppTheme.radius2XL),
                 border: Border.all(color: AppTheme.surfaceLight),
               ),
               child: InkWell(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(AppTheme.radius2XL),
                 onTap: () {
                   context.push('/detail/${Uri.encodeComponent(item.pluginId ?? '')}/${Uri.encodeComponent(item.id)}');
                 },
@@ -510,11 +596,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     ClipRRect(
-                      borderRadius: const BorderRadius.horizontal(left: Radius.circular(15)),
+                      borderRadius: const BorderRadius.horizontal(
+                        left: Radius.circular(AppTheme.radius2XL),
+                      ),
                       child: CachedNetworkImage(
                         imageUrl: item.cover,
-                        width: 100,
-                        height: 135,
+                        width: 96,
+                        height: 132,
                         fit: BoxFit.cover,
                         placeholder: (context, url) => Container(
                           color: AppTheme.surfaceLight,
@@ -528,67 +616,61 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                     ),
                     Expanded(
                       child: Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: SizedBox(
-                          height: 103,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
+                        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: Text(
                                     item.title,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 16,
-                                      color: AppTheme.textPrimary,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    item.description ?? '',
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
                                     style: const TextStyle(
-                                        fontSize: 12, color: AppTheme.textSecondary),
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 15,
+                                      height: 1.25,
+                                      color: AppTheme.textPrimary,
+                                    ),
                                   ),
-                                ],
-                              ),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    'ID: ${item.id}',
+                                ),
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.primary.withValues(alpha: 0.14),
+                                    borderRadius: BorderRadius.circular(AppTheme.radiusMD),
+                                    border: Border.all(
+                                      color: AppTheme.primary.withValues(alpha: 0.35),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    item.pluginName ?? '未知源',
                                     style: const TextStyle(
-                                        fontSize: 10, color: AppTheme.textTertiary),
-                                  ),
-                                  Container(
-                                    padding:
-                                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: AppTheme.primary.withOpacity(0.1),
-                                      borderRadius:
-                                          BorderRadius.circular(AppTheme.radiusMD),
-                                      border: Border.all(
-                                          color: AppTheme.primary.withOpacity(0.3)),
-                                    ),
-                                    child: Text(
-                                      item.pluginName ?? '未知源',
-                                      style: const TextStyle(
-                                        fontSize: 9,
-                                        color: AppTheme.primaryHover,
-                                        fontWeight: FontWeight.bold,
-                                      ),
+                                      fontSize: 10,
+                                      color: AppTheme.primaryHover,
+                                      fontWeight: FontWeight.bold,
                                     ),
                                   ),
-                                ],
+                                ),
+                              ],
+                            ),
+                            if ((item.description ?? '').trim().isNotEmpty) ...[
+                              const SizedBox(height: 6),
+                              Text(
+                                item.description!.trim(),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  height: 1.35,
+                                  color: AppTheme.textSecondary,
+                                ),
                               ),
                             ],
-                          ),
+                          ],
                         ),
                       ),
                     ),
@@ -597,7 +679,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               ),
             );
           },
-          childCount: outcome.items.length + (outcome.hasFailures ? 1 : 0),
+          childCount: 1 + visibleItems.length + (outcome.hasFailures ? 1 : 0),
         ),
       ),
     );

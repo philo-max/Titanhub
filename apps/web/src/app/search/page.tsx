@@ -118,6 +118,7 @@ function SearchPageInner() {
 
   const [keyword, setKeyword] = useState(q);
   const [availableSources, setAvailableSources] = useState<{ id: string; name: string; types: string[]; isActive: boolean }[]>([]);
+  const [resultSourceFilter, setResultSourceFilter] = useState<string>('');
   const [items, setItems] = useState<AggregatedMediaItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -149,6 +150,7 @@ function SearchPageInner() {
 
   useEffect(() => {
     setKeyword(q);
+    setResultSourceFilter('');
     if (!q.trim()) {
       setItems([]);
       setSearched(false);
@@ -514,32 +516,90 @@ function SearchPageInner() {
             </div>
           )}
 
-          {items.length > 0 && !error && (
-            <>
-              <p className="text-xs text-textSecondary mb-4">
-                共 {items.length} 条结果，来自已启用的资源插件
-              </p>
-              <div className="w-full grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-                {items.map((item: any) => {
-                  const metaSource = item.sources?.find((s: any) => s.isMetadata);
-                  const defaultSource = metaSource || item.sources?.[0];
-                  if (!defaultSource) return null;
-                  
-                  const badge = metaSource ? '聚合数据' : (defaultSource.pluginName || '未知');
-                  const isInfoSource = metaSource ? true : false;
-                  
-                  return (
-                    <Link
-                      key={`${item.id}`}
-                      href={`/${item.mediaType}/${defaultSource.pluginId}/${defaultSource.mediaId}`}
+          {items.length > 0 && !error && (() => {
+            const sourceMap = new Map<string, { name: string; count: number }>();
+            for (const item of items as any[]) {
+              for (const s of item.sources || []) {
+                if (!s?.pluginId) continue;
+                const prev = sourceMap.get(s.pluginId);
+                sourceMap.set(s.pluginId, {
+                  name: s.pluginName || s.pluginId,
+                  count: (prev?.count || 0) + 1,
+                });
+              }
+            }
+            const activeResultFilter = resultSourceFilter && sourceMap.has(resultSourceFilter) ? resultSourceFilter : '';
+            const visibleItems = activeResultFilter
+              ? (items as any[]).filter((item) => item.sources?.some((s: any) => s.pluginId === activeResultFilter))
+              : items;
+
+            return (
+              <>
+                <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                  <p className="text-xs text-textSecondary">
+                    {activeResultFilter
+                      ? `${sourceMap.get(activeResultFilter)?.name}：共 ${visibleItems.length} 条结果`
+                      : `共 ${items.length} 条聚合结果，点击来源可单独筛选`}
+                  </p>
+                </div>
+                {sourceMap.size > 1 && (
+                  <div className="flex flex-wrap gap-2 mb-6">
+                    <button
+                      type="button"
+                      onClick={() => setResultSourceFilter('')}
+                      className={`text-xs px-3 py-1.5 rounded-pill border transition-all cursor-pointer ${
+                        !activeResultFilter
+                          ? 'bg-primary/20 border-primary text-primary font-semibold'
+                          : 'bg-surface/60 border-border text-textSecondary hover:text-textPrimary'
+                      }`}
                     >
-                      <MediaCard item={item} originBadge={badge} isInfoSource={isInfoSource} />
-                    </Link>
-                  );
-                })}
-              </div>
-            </>
-          )}
+                      全部结果 ({items.length})
+                    </button>
+                    {Array.from(sourceMap.entries()).map(([id, info]) => (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() => setResultSourceFilter(activeResultFilter === id ? '' : id)}
+                        className={`text-xs px-3 py-1.5 rounded-pill border transition-all cursor-pointer ${
+                          activeResultFilter === id
+                            ? 'bg-primary/20 border-primary text-primary font-semibold'
+                            : 'bg-surface/60 border-border text-textSecondary hover:text-textPrimary'
+                        }`}
+                      >
+                        {info.name} ({info.count})
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <div className="w-full grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+                  {visibleItems.map((item: any) => {
+                    const matchedSource = activeResultFilter
+                      ? item.sources?.find((s: any) => s.pluginId === activeResultFilter)
+                      : undefined;
+                    const metaSource = item.sources?.find((s: any) => s.isMetadata);
+                    const defaultSource = matchedSource || metaSource || item.sources?.[0];
+                    if (!defaultSource) return null;
+
+                    const badge = matchedSource
+                      ? matchedSource.pluginName
+                      : metaSource
+                        ? '聚合数据'
+                        : defaultSource.pluginName || '未知';
+                    const isInfoSource = matchedSource ? !matchedSource.providesVideo : Boolean(metaSource);
+
+                    return (
+                      <Link
+                        key={`${item.id}-${defaultSource.pluginId}`}
+                        href={`/${item.mediaType}/${defaultSource.pluginId}/${defaultSource.mediaId}`}
+                      >
+                        <MediaCard item={item} originBadge={badge} isInfoSource={isInfoSource} />
+                      </Link>
+                    );
+                  })}
+                </div>
+              </>
+            );
+          })()}
         </div>
       </div>
     </div>
