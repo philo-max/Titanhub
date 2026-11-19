@@ -229,7 +229,8 @@ class VeneraSource {
         final result = await _call('searchPage', [keyword, 1]) as Map;
         return _list(result['comics']);
       case 'explore':
-        final result = await _call('explore') as Map;
+        final tab = args.isNotEmpty && args.first != null ? ['${args.first}'] : const <Object?>[];
+        final result = await _call('explore', tab) as Map;
         return _list(result['comics']);
       case 'getDetail':
         return (await _info('${args.first}'))['detail'];

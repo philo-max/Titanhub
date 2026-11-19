@@ -132,3 +132,7 @@ final searchSourcesProvider = Provider.family<List<MediaSource>, MediaTypeFilter
 });
 
 final remoteEnabledProvider = StateProvider<bool>((ref) => false);
+
+final dataSaverEnabledProvider = StateProvider<bool>((ref) => false);
+
+final pendingSearchQueryProvider = StateProvider<String?>((ref) => null);

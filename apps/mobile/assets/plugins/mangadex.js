@@ -254,14 +254,19 @@ const plugin = {
     }));
   },
 
-  async getImages(chapterId) {
+  async getImages(chapterId, options) {
     const data = await requestJson(API + '/at-home/server/' + encodeURIComponent(chapterId));
     const baseUrl = data && data.baseUrl;
     const chapterData = (data && data.chapter) || {};
     const hash = chapterData.hash;
+    const preferSaver = Boolean(options && (options === true || options.dataSaver === true));
 
-    let files = chapterData.data || [];
-    let mode = 'data';
+    let files = (preferSaver && chapterData.dataSaver && chapterData.dataSaver.length > 0)
+      ? chapterData.dataSaver
+      : (chapterData.data || []);
+    let mode = (preferSaver && chapterData.dataSaver && chapterData.dataSaver.length > 0)
+      ? 'data-saver'
+      : 'data';
     if (files.length === 0 && chapterData.dataSaver && chapterData.dataSaver.length > 0) {
       files = chapterData.dataSaver;
       mode = 'data-saver';

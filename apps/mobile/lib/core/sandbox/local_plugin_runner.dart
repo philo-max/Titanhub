@@ -112,6 +112,17 @@ class LocalPluginRunner {
     ];
   }
 
+  Future<List<String>> exploreTabsFor(String pluginId) async {
+    final venera = _veneraSources[pluginId];
+    if (venera != null) {
+      final info = await venera.info();
+      return info.exploreTitles;
+    }
+    if (pluginId == 'bangumi') return const ['每日放送'];
+    if (pluginId == 'mangadex') return const ['人气推荐'];
+    return const [];
+  }
+
   Future<dynamic> call(String pluginId, String method, List<dynamic> args) async {
     if (pluginId == SevenSeFunSource.pluginId) {
       return _getNativeSource(pluginId).call(method, args);

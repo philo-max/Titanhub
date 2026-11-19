@@ -41,13 +41,17 @@ const String veneraShimBridge = r'''
     if (!res) throw new Error('来源没有提供搜索');
     return { comics: comics(res.comics), maxPage: res.maxPage || null };
   }
-  async function exploreFirst() {
+  async function exploreFirst(targetTitle) {
     var s = src();
     var pages = Array.isArray(s.explore) ? s.explore : [];
     if (pages.length === 0) throw new Error('HOME_UNSUPPORTED: 该来源没有首页');
+    var candidates = targetTitle
+      ? pages.filter(function(p) { return text(p.title) === String(targetTitle); })
+      : pages;
+    if (candidates.length === 0) candidates = pages;
     var failures = [];
-    for (var i = 0; i < pages.length; i++) {
-      var page = pages[i];
+    for (var i = 0; i < candidates.length; i++) {
+      var page = candidates[i];
       try {
         var result;
         var type = page.type;

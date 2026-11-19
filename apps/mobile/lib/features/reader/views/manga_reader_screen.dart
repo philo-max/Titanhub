@@ -45,6 +45,8 @@ class _MangaReaderScreenState extends ConsumerState<MangaReaderScreen>
   int _pageCount = 0;
   int _restoredPage = 0;
   int _lastSavedPage = -1;
+  final Set<String> _prefetchedUrls = {};
+  List<String> _currentImages = const [];
   int? _anchorPage;
   bool _anchorQueued = false;
   bool _restored = false;
@@ -144,6 +146,7 @@ class _MangaReaderScreenState extends ConsumerState<MangaReaderScreen>
       setState(() {
         _currentPage = page;
       });
+      _prefetchAhead(page);
       _saveProgress();
     });
   }
@@ -226,6 +229,23 @@ class _MangaReaderScreenState extends ConsumerState<MangaReaderScreen>
 
   void _resetZoom() {
     _transformationController.value = Matrix4.identity();
+  }
+
+  /// 预加载当前页后方的 3 页图片，减少翻页等待（参考 Mangayomi）。
+  void _prefetchAhead(int fromPage) {
+    if (!mounted || _disposed || _currentImages.isEmpty) return;
+    final runner = ref.read(localPluginRunnerProvider);
+    final end = (fromPage + 3).clamp(0, _currentImages.length - 1);
+    for (var i = fromPage + 1; i <= end; i++) {
+      final url = _currentImages[i];
+      if (url.isEmpty || !_prefetchedUrls.add(url)) continue;
+      final headers = runner.imageHeadersFor(widget.pluginId, url);
+      precacheImage(
+        CachedNetworkImageProvider(url, headers: headers),
+        context,
+        onError: (_, __) => _prefetchedUrls.remove(url),
+      );
+    }
   }
 
   Future<void> _retryPage(int index, String url) async {
@@ -318,6 +338,10 @@ class _MangaReaderScreenState extends ConsumerState<MangaReaderScreen>
             }
 
             _pageCount = images.length;
+            if (!identical(_currentImages, images)) {
+              _currentImages = images;
+              WidgetsBinding.instance.addPostFrameCallback((_) => _prefetchAhead(_currentPage));
+            }
             final restoreTarget = restoredMangaPage(savedPage: _restoredPage, pageCount: images.length);
             if (restoreTarget != null && restoreTarget > 0 && !_restored && !_userScrolled) {
               WidgetsBinding.instance.addPostFrameCallback((_) {

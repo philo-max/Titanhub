@@ -73,6 +73,8 @@ List<MediaItem> _parseRemoteSearch(dynamic data, Set<String> localIds) {
   return items;
 }
 
+const Duration _searchSourceTimeout = Duration(seconds: 10);
+
 final searchMediaProvider =
     FutureProvider.family<SearchOutcome, SearchRequest>((ref, request) async {
   final trimmed = request.query.trim();
@@ -95,7 +97,9 @@ final searchMediaProvider =
     for (final source in sources)
       () async {
         try {
-          final List<dynamic> raw = await runner.call(source.id, 'search', [trimmed]);
+          final List<dynamic> raw = await runner
+              .call(source.id, 'search', [trimmed])
+              .timeout(_searchSourceTimeout);
           final found = <MediaItem>[];
           for (final entry in raw) {
             final map = Map<String, dynamic>.from(entry);
@@ -224,12 +228,16 @@ final mediaDanmakusProvider =
 
 final mangaPagesProvider =
     FutureProvider.family<List<String>, ({String pluginId, String chapterId})>((ref, arg) async {
+  final dataSaver = ref.watch(dataSaverEnabledProvider);
   return _withSource<List<String>>(
     ref,
     pluginId: arg.pluginId,
     capability: MediaCapability.images,
     local: (runner) async {
-      final List<dynamic> raw = await runner.call(arg.pluginId, 'getImages', [arg.chapterId]);
+      final callArgs = arg.pluginId == 'mangadex' && dataSaver
+          ? <dynamic>[arg.chapterId, {'dataSaver': true}]
+          : <dynamic>[arg.chapterId];
+      final List<dynamic> raw = await runner.call(arg.pluginId, 'getImages', callArgs);
       return List<String>.from(raw);
     },
     remote: (dio) async {
@@ -237,6 +245,32 @@ final mangaPagesProvider =
       return List<String>.from(response.data['images'] ?? const []);
     },
   );
+});
+
+final sourceExploreTabsProvider = FutureProvider.family<List<String>, String>((ref, pluginId) async {
+  final runner = ref.watch(localPluginRunnerProvider);
+  return runner.exploreTabsFor(pluginId);
+});
+
+typedef ExploreRequest = ({String pluginId, String tab, String mediaType});
+
+final sourceExploreItemsProvider = FutureProvider.family<List<MediaItem>, ExploreRequest>((ref, arg) async {
+  final runner = ref.watch(localPluginRunnerProvider);
+  final source = ref.watch(sourceByIdProvider(arg.pluginId));
+  final callArg = runner.hasVeneraSource(arg.pluginId) ? arg.tab : arg.mediaType;
+  final raw = await runner
+      .call(arg.pluginId, 'explore', [callArg])
+      .timeout(_searchSourceTimeout);
+  if (raw is! List) return const <MediaItem>[];
+  return [
+    for (final entry in raw)
+      if (entry is Map)
+        MediaItem.fromJson({
+          ...Map<String, dynamic>.from(entry),
+          'pluginId': arg.pluginId,
+          'pluginName': source?.name ?? arg.pluginId,
+        }),
+  ];
 });
 
 final novelContentProvider =

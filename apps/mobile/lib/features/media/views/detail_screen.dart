@@ -193,8 +193,9 @@ class DetailScreen extends ConsumerWidget {
                     Center(
                       child: Wrap(
                         spacing: 8,
+                        runSpacing: 6,
                         children: detail.genres.map((genre) {
-                          return Chip(
+                          return ActionChip(
                             label: Text(
                               genre,
                               style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
@@ -202,6 +203,10 @@ class DetailScreen extends ConsumerWidget {
                             backgroundColor: AppTheme.surface,
                             side: const BorderSide(color: AppTheme.surfaceLight),
                             padding: const EdgeInsets.symmetric(horizontal: 4),
+                            onPressed: () {
+                              ref.read(pendingSearchQueryProvider.notifier).state = genre;
+                              context.go('/');
+                            },
                           );
                         }).toList(),
                       ),
