@@ -1,9 +1,23 @@
 import { DOMParser } from '@xmldom/xmldom';
+import { isIP } from 'node:net';
 import { MAX_SNAPSHOT_BYTES } from './protocol';
 
 export interface WebDavConfig { url: string; username: string; password: string; allowInsecureHttp?: boolean }
 export const REQUEST_TIMEOUT_MS = 15000;
 export const MAX_DIRECTORY_ENTRIES = 10000;
+const MAX_GET_REDIRECTS = 3;
+
+function isPrivateRedirectHost(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  if (!host || host === 'localhost' || host.endsWith('.local')) return true;
+  if (isIP(host) === 4) {
+    return /^(0\.|127\.|10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|169\.254\.|100\.(6[4-9]|[7-9][0-9]|1[0-1][0-9]|12[0-7])\.)/.test(host);
+  }
+  if (isIP(host) === 6) {
+    return host === '::1' || host === '::' || host.startsWith('fe80:') || host.startsWith('fc00:') || host.startsWith('fd00:') || host.startsWith('::ffff:');
+  }
+  return false;
+}
 export class DavError extends Error {
   constructor(public status: number, method: string) { super(`WebDAV ${method}: HTTP ${status}`); }
 }
@@ -32,8 +46,38 @@ export class WebDavTransport {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     try {
-      const response = await fetch(this.resolve(path), { method, body, headers: { Authorization: this.authorization, ...headers }, redirect: 'manual', signal: controller.signal });
-      if (response.status >= 300 && response.status < 400) throw new Error('WebDAV redirects are not allowed');
+      let currentUrl = this.resolve(path);
+      let response: Response | null = null;
+      for (let hop = 0; ; hop++) {
+        const reqHeaders: Record<string, string> = { ...headers };
+        if (currentUrl.origin === this.root.origin) {
+          reqHeaders.Authorization = this.authorization;
+        } else {
+          delete reqHeaders.Authorization;
+          delete reqHeaders.authorization;
+        }
+        response = await fetch(currentUrl, {
+          method,
+          body: currentUrl.origin === this.root.origin ? body : undefined,
+          headers: reqHeaders,
+          redirect: 'manual',
+          signal: controller.signal,
+        });
+        if (response.status >= 300 && response.status < 400) {
+          const canFollow = (method === 'GET' || method === 'HEAD') && hop < MAX_GET_REDIRECTS;
+          const location = response.headers.get('location');
+          await response.body?.cancel();
+          if (!canFollow || !location) throw new Error('WebDAV redirects are not allowed');
+          let nextUrl: URL;
+          try { nextUrl = new URL(location, currentUrl); } catch { throw new Error('WebDAV redirects are not allowed'); }
+          if (nextUrl.protocol !== 'https:' || isPrivateRedirectHost(nextUrl.hostname)) {
+            throw new Error('WebDAV redirects are not allowed');
+          }
+          currentUrl = nextUrl;
+          continue;
+        }
+        break;
+      }
       if (!response.ok && !(allow404 && response.status === 404)) throw new DavError(response.status, method);
       const size = Number(response.headers.get('content-length'));
       if (size > MAX_SNAPSHOT_BYTES) throw new Error('WebDAV response too large');

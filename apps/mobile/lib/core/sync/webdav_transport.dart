@@ -9,6 +9,25 @@ import 'sync_protocol.dart';
 
 const Duration requestTimeout = Duration(milliseconds: 15000);
 const int maxDirectoryEntries = 10000;
+const int maxGetRedirects = 3;
+
+bool _isPrivateRedirectHost(String host) {
+  final normalized = host.toLowerCase().replaceAll(RegExp(r'^\[|\]$'), '');
+  if (normalized.isEmpty || normalized == 'localhost' || normalized.endsWith('.local')) return true;
+  if (RegExp(r'^(0\.|127\.|10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|169\.254\.|100\.(6[4-9]|[7-9][0-9]|1[0-1][0-9]|12[0-7])\.)')
+      .hasMatch(normalized)) {
+    return true;
+  }
+  if (normalized == '::1' ||
+      normalized == '::' ||
+      normalized.startsWith('fe80:') ||
+      normalized.startsWith('fc00:') ||
+      normalized.startsWith('fd00:') ||
+      normalized.startsWith('::ffff:')) {
+    return true;
+  }
+  return false;
+}
 
 class DavException implements Exception {
   const DavException(this.message);
@@ -161,17 +180,48 @@ class WebDavTransport {
     bool allow404,
     CancelToken cancelToken,
   ) async {
-    final response = await _dio.requestUri<ResponseBody>(
-      uri,
-      data: body,
-      cancelToken: cancelToken,
-      options: Options(
-        method: method,
-        headers: <String, String>{'Authorization': _authorization, ...headers},
-      ),
-    );
-    final status = response.statusCode ?? 0;
-    if (status >= 300 && status < 400) throw const DavException('WebDAV redirects are not allowed');
+    var currentUri = uri;
+    late Response<ResponseBody> response;
+    late int status;
+    for (var hop = 0;; hop++) {
+      final requestHeaders = <String, String>{...headers};
+      if (_origin(currentUri) == _origin(root)) {
+        requestHeaders['Authorization'] = _authorization;
+      } else {
+        requestHeaders.remove('Authorization');
+        requestHeaders.remove('authorization');
+      }
+      response = await _dio.requestUri<ResponseBody>(
+        currentUri,
+        data: _origin(currentUri) == _origin(root) ? body : null,
+        cancelToken: cancelToken,
+        options: Options(
+          method: method,
+          headers: requestHeaders,
+        ),
+      );
+      status = response.statusCode ?? 0;
+      if (status >= 300 && status < 400) {
+        final canFollow = (method == 'GET' || method == 'HEAD') && hop < maxGetRedirects;
+        final location = response.headers.value('location');
+        await response.data?.stream.drain<void>().catchError((_) {});
+        if (!canFollow || location == null || location.isEmpty) {
+          throw const DavException('WebDAV redirects are not allowed');
+        }
+        final Uri nextUri;
+        try {
+          nextUri = currentUri.resolve(location);
+        } catch (_) {
+          throw const DavException('WebDAV redirects are not allowed');
+        }
+        if (nextUri.scheme != 'https' || _isPrivateRedirectHost(nextUri.host)) {
+          throw const DavException('WebDAV redirects are not allowed');
+        }
+        currentUri = nextUri;
+        continue;
+      }
+      break;
+    }
     if ((status < 200 || status >= 300) && !(allow404 && status == 404)) throw DavError(status, method);
     final declared = int.tryParse(response.headers.value('content-length') ?? '');
     if (declared != null && declared > maxSnapshotBytes) {
