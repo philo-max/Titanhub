@@ -554,8 +554,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                       LucideIcons.bookOpen, 'MangaDex 图片', Colors.cyanAccent),
                   _buildCategoryCard(context, MediaTypeFilter.novel, selectedType, '轻小说 (Novel)',
                       LucideIcons.fileText, '暂无本机来源', Colors.pinkAccent),
-                  _buildCategoryCard(context, MediaTypeFilter.movie, selectedType, '影视 (Movie)',
-                      LucideIcons.tv, '暂无本机来源', Colors.amberAccent),
                 ],
               ),
             ),

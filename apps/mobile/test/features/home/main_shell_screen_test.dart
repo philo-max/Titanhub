@@ -80,7 +80,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Titanhub · 番剧'), findsOneWidget);
-    expect(find.text('新番 / 热门番剧推荐'), findsOneWidget);
+    expect(find.byKey(const Key('anime-ranking-热门榜')), findsOneWidget);
+    expect(find.byKey(const Key('anime-ranking-高分榜')), findsOneWidget);
+    expect(find.byKey(const Key('anime-ranking-新作榜')), findsOneWidget);
+    expect(find.byKey(const Key('anime-ranking-每日新番')), findsOneWidget);
     expect(find.text('测试作品'), findsOneWidget);
 
     await tester.tap(find.text('漫画').last);

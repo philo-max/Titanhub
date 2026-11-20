@@ -50,20 +50,38 @@ const plugin = {
     }));
   },
 
-  async explore(type) {
-    if (type !== 'anime') return [];
+  async explore(tabOrType) {
+    const key = String(tabOrType || '').trim();
+    const sortMap = { '热门榜': 'heat', '高分榜': 'rank', '新作榜': 'date' };
+    if (sortMap[key]) {
+      const res = await fetch(API + '/v0/search/subjects?limit=24', {
+        method: 'POST',
+        headers: { ...HEADERS, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keyword: '', filter: { type: [2] }, sort: sortMap[key] }),
+      });
+      const data = JSON.parse(await res.text());
+      const list = (data && data.data) || [];
+      return list.map((item) => ({
+        id: String(item.id),
+        title: item.name_cn || item.name || '未命名',
+        cover: pickCover(item.images),
+        description: item.summary || '',
+        updateInfo: item.rating && item.rating.score ? '★ ' + item.rating.score : key,
+      }));
+    }
+    if (key && key !== 'anime' && key !== '每日新番') return [];
     const res = await fetch(API + '/calendar', { headers: HEADERS });
     const weekdays = JSON.parse(await res.text());
     const today = new Date().getDay(); // 0=Sunday
     const bangumiWeekday = today === 0 ? 7 : today;
     const group = weekdays.find((w) => w.weekday && w.weekday.id === bangumiWeekday) || weekdays[0];
     const items = (group && group.items) || [];
-    return items.slice(0, 12).map((item) => ({
+    return items.slice(0, 24).map((item) => ({
       id: String(item.id),
       title: item.name_cn || item.name || '未命名',
       cover: pickCover(item.images),
       description: item.summary || '',
-      updateInfo: '今日放送',
+      updateInfo: item.rating && item.rating.score ? '★ ' + item.rating.score : '今日放送',
     }));
   },
 

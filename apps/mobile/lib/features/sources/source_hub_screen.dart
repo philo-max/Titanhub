@@ -38,7 +38,8 @@ class SourceHubScreen extends ConsumerWidget {
               const SizedBox(height: 12),
               const _SourceHealthCard(),
               const SizedBox(height: 12),
-              for (final kind in SourceKind.values) _KindCard(kind: kind),
+              for (final kind in SourceKind.values)
+                if (kind != SourceKind.movie) _KindCard(kind: kind),
             ],
           ),
         ),

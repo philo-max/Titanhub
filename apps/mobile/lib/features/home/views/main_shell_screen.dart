@@ -14,6 +14,7 @@ import '../../sources/source_hub_screen.dart';
 import '../../tracking/sync_provider.dart';
 
 const List<String> _animeHotTags = ['校园', '奇幻', '热血', '治愈', '悬疑', '科幻'];
+const List<String> _animeRankingTabs = ['热门榜', '高分榜', '新作榜', '每日新番'];
 const List<String> _mangaHotTags = ['热血', '恋爱', '奇幻', '搞笑', '悬疑', '日常'];
 
 String _searchRoute({
@@ -165,11 +166,18 @@ class _HubHeader extends StatelessWidget {
   }
 }
 
-class _AnimeHubTab extends ConsumerWidget {
+class _AnimeHubTab extends ConsumerStatefulWidget {
   const _AnimeHubTab();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_AnimeHubTab> createState() => _AnimeHubTabState();
+}
+
+class _AnimeHubTabState extends ConsumerState<_AnimeHubTab> {
+  String _rankingTab = _animeRankingTabs.first;
+
+  @override
+  Widget build(BuildContext context) {
     final activeSources = ref.watch(activeSourcesProvider);
     final animeSources = [
       for (final s in activeSources)
@@ -178,7 +186,7 @@ class _AnimeHubTab extends ConsumerWidget {
     final hasBangumi = animeSources.any((s) => s.id == 'bangumi');
     final exploreAsync = hasBangumi
         ? ref.watch(sourceExploreItemsProvider(
-            (pluginId: 'bangumi', tab: '', mediaType: 'anime'),
+            (pluginId: 'bangumi', tab: _rankingTab, mediaType: 'anime'),
           ))
         : const AsyncValue<List<MediaItem>>.data([]);
 
@@ -193,66 +201,48 @@ class _AnimeHubTab extends ConsumerWidget {
         ),
         SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 6, 16, 4),
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('热门标签',
-                    style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.textPrimary)),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 6,
-                  children: [
-                    for (final tag in _animeHotTags)
-                      ActionChip(
-                        label: Text(tag, style: const TextStyle(fontSize: 12)),
-                        onPressed: () => context.push(_searchRoute(
-                          type: MediaTypeFilter.anime,
-                          query: 'tag:$tag',
-                        )),
-                      ),
-                  ],
-                ),
-                if (animeSources.isNotEmpty) ...[
-                  const SizedBox(height: 14),
-                  const Text('已启用动漫源',
-                      style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: AppTheme.textPrimary)),
-                  const SizedBox(height: 8),
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        for (final src in animeSources)
-                          Padding(
-                            padding: const EdgeInsets.only(right: 8),
-                            child: ActionChip(
-                              avatar: const Icon(LucideIcons.play, size: 13),
-                              label: Text(src.name,
-                                  style: const TextStyle(fontSize: 12)),
-                              onPressed: () => context.push(_searchRoute(
-                                type: MediaTypeFilter.anime,
-                                sourceId: src.id,
-                              )),
-                            ),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      for (final tab in _animeRankingTabs)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: ChoiceChip(
+                            key: Key('anime-ranking-$tab'),
+                            label: Text(tab, style: const TextStyle(fontSize: 12)),
+                            selected: tab == _rankingTab,
+                            selectedColor: AppTheme.primary.withValues(alpha: 0.25),
+                            onSelected: (_) => setState(() => _rankingTab = tab),
                           ),
-                      ],
-                    ),
+                        ),
+                    ],
                   ),
-                ],
-                const SizedBox(height: 16),
-                const Text('新番 / 热门番剧推荐',
-                    style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.textPrimary)),
+                ),
                 const SizedBox(height: 8),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      for (final tag in _animeHotTags)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: ActionChip(
+                            visualDensity: VisualDensity.compact,
+                            label: Text('#$tag', style: const TextStyle(fontSize: 11)),
+                            onPressed: () => context.push(_searchRoute(
+                              type: MediaTypeFilter.anime,
+                              query: 'tag:$tag',
+                            )),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
@@ -267,7 +257,7 @@ class _AnimeHubTab extends ConsumerWidget {
           ),
           error: (err, _) => SliverToBoxAdapter(
             child: _EmptyHubBanner(
-              message: '番剧推荐加载失败：$err',
+              message: '番剧排行榜加载失败：$err',
               actionLabel: '前往搜索番剧',
               onAction: () =>
                   context.push(_searchRoute(type: MediaTypeFilter.anime)),
@@ -278,7 +268,7 @@ class _AnimeHubTab extends ConsumerWidget {
               return SliverToBoxAdapter(
                 child: _EmptyHubBanner(
                   message: hasBangumi
-                      ? '暂无新番推荐，点下方直接搜索番剧。'
+                      ? '暂无「$_rankingTab」数据，点下方直接搜索番剧。'
                       : '未启用 Bangumi 推荐源，可在「源中心」开启或直接搜索。',
                   actionLabel: '去搜番剧',
                   onAction: () =>
@@ -693,60 +683,72 @@ class _MediaPosterGrid extends StatelessWidget {
     return SliverPadding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       sliver: SliverGrid(
-        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-          maxCrossAxisExtent: 150,
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 3,
           mainAxisSpacing: 12,
           crossAxisSpacing: 10,
-          childAspectRatio: 0.62,
+          childAspectRatio: 0.68,
         ),
         delegate: SliverChildBuilderDelegate(
           (context, index) {
             final item = items[index];
             final pluginId = item.pluginId ?? '';
             return InkWell(
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(12),
               onTap: pluginId.isEmpty
                   ? null
                   : () => context.push(
                         '/detail/${Uri.encodeComponent(pluginId)}/${Uri.encodeComponent(item.id)}',
                       ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(10),
-                      child: Container(
-                        width: double.infinity,
-                        color: AppTheme.surfaceLight,
-                        child: item.cover.isNotEmpty
-                            ? CachedNetworkImage(
-                                imageUrl: item.cover,
-                                fit: BoxFit.cover,
-                                errorWidget: (_, __, ___) => const Center(
-                                  child: Icon(LucideIcons.imageOff,
-                                      size: 20, color: AppTheme.textSecondary),
-                                ),
-                              )
-                            : const Center(
-                                child: Icon(LucideIcons.film,
-                                    size: 22, color: AppTheme.textSecondary),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Container(
+                      color: AppTheme.surfaceLight,
+                      child: item.cover.isNotEmpty
+                          ? CachedNetworkImage(
+                              imageUrl: item.cover,
+                              fit: BoxFit.cover,
+                              errorWidget: (_, __, ___) => const Center(
+                                child: Icon(LucideIcons.imageOff,
+                                    size: 20, color: AppTheme.textSecondary),
                               ),
+                            )
+                          : const Center(
+                              child: Icon(LucideIcons.film,
+                                  size: 22, color: AppTheme.textSecondary),
+                            ),
+                    ),
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      child: Container(
+                        padding: const EdgeInsets.fromLTRB(8, 22, 8, 8),
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [Colors.transparent, Color(0xDD000000)],
+                          ),
+                        ),
+                        child: Text(
+                          item.title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                            height: 1.25,
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    item.title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      color: AppTheme.textPrimary,
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             );
           },

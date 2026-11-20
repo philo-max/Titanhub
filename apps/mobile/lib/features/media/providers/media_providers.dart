@@ -266,7 +266,10 @@ typedef ExploreRequest = ({String pluginId, String tab, String mediaType});
 final sourceExploreItemsProvider = FutureProvider.family<List<MediaItem>, ExploreRequest>((ref, arg) async {
   final runner = ref.watch(localPluginRunnerProvider);
   final source = ref.watch(sourceByIdProvider(arg.pluginId));
-  final callArg = runner.hasVeneraSource(arg.pluginId) ? arg.tab : arg.mediaType;
+  final callArg = (runner.hasVeneraSource(arg.pluginId) ||
+          (arg.pluginId == 'bangumi' && arg.tab.isNotEmpty))
+      ? arg.tab
+      : arg.mediaType;
   final raw = await runner
       .call(arg.pluginId, 'explore', [callArg])
       .timeout(_searchSourceTimeout);
