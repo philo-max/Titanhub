@@ -211,7 +211,7 @@ const String veneraShimCore = r'''
       return function() { throw new Error('需要宿主能力：UI.' + String(key)); };
     }
   });
-  g.compute = function() { throw new Error('需要宿主能力：compute'); };
+  g.compute = function(fn, arg) { return typeof fn === 'function' ? fn(arg) : null; };
   g.setClipboard = function() { throw new Error('需要宿主能力：setClipboard'); };
   g.getClipboard = function() { throw new Error('需要宿主能力：getClipboard'); };
   g.setInterval = function() { throw new Error('需要宿主能力：setInterval'); };

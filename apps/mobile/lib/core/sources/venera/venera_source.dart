@@ -7,6 +7,7 @@ import '../../sync/webdav_config_store.dart';
 import 'venera_cookies.dart';
 import 'venera_engine.dart';
 import 'venera_host.dart';
+import 'venera_image_proxy.dart';
 import 'venera_models.dart';
 import 'venera_policy.dart';
 import 'venera_store.dart';
@@ -261,9 +262,19 @@ class VeneraSource {
         final cookie = engine.host.cookies.headerFor(uri);
         if (cookie != null) headers['Cookie'] = cookie;
       }
-      if (_imageHeaders.length >= veneraMaxImageHeaderEntries) _imageHeaders.remove(_imageHeaders.keys.first);
-      _imageHeaders[url] = headers;
-      urls.add(url);
+      final modifyScript = item['modifyImage']?.toString() ?? '';
+      if (modifyScript.isNotEmpty) {
+        final proxyUrl = await VeneraImageProxy.instance.register(
+          url: url,
+          headers: headers,
+          modifyImageScript: modifyScript,
+        );
+        urls.add(proxyUrl);
+      } else {
+        if (_imageHeaders.length >= veneraMaxImageHeaderEntries) _imageHeaders.remove(_imageHeaders.keys.first);
+        _imageHeaders[url] = headers;
+        urls.add(url);
+      }
     }
     if (urls.isEmpty) throw const VeneraException('来源没有返回任何图片');
     return urls;

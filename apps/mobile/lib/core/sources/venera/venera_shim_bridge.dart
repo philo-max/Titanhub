@@ -131,17 +131,22 @@ const String veneraShimBridge = r'''
       var item = list[i];
       var url = typeof item === 'string' ? item : item && item.url;
       var headers = Object.assign({}, typeof item === 'object' && item ? item.headers : {});
+      var modifyImage = null;
       if (hook) {
         var config = (await hook(url, comicId, epId === '' ? null : epId)) || {};
-        if (config.modifyImage) throw new Error(UNSUPPORTED + '图片处理（modifyImage）');
         if (config.onResponse) throw new Error(UNSUPPORTED + '图片响应处理（onResponse）');
         if (config.data !== undefined && config.data !== null) throw new Error(UNSUPPORTED + '带请求体的图片请求');
         if (config.method && String(config.method).toUpperCase() !== 'GET') throw new Error(UNSUPPORTED + '非 GET 图片请求');
+        if (config.modifyImage) {
+          modifyImage = typeof config.modifyImage === 'function'
+            ? config.modifyImage.toString()
+            : String(config.modifyImage);
+        }
         Object.assign(headers, config.headers || {});
         url = config.url || url;
       }
       if (typeof url !== 'string' || !url) throw new Error('图片地址无效');
-      out.push({ url: url, headers: headers });
+      out.push({ url: url, headers: headers, modifyImage: modifyImage });
     }
     return out;
   }
