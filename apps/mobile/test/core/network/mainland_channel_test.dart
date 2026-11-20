@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:titanhub/core/network/mainland_channel.dart';
@@ -48,5 +51,40 @@ void main() {
     expect(await resolver.resolveA('example.com'), '104.21.10.20');
     expect(await resolver.resolveA('example.com'), '104.21.10.20');
     expect(requests.length, 2); // 1 failed AliDNS + 1 DNSPod, second call cached
+  });
+
+  test('MainlandDohProxy routes poisoned hostname to resolved IP', () async {
+    final target = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => target.close(force: true));
+    target.listen((req) async {
+      req.response
+        ..statusCode = HttpStatus.ok
+        ..write('DOH_OK:${req.uri.path}');
+      await req.response.close();
+    });
+
+    final dohDio = Dio()
+      ..interceptors.add(InterceptorsWrapper(onRequest: (options, handler) {
+        handler.resolve(Response(requestOptions: options, statusCode: 200, data: {
+          'Answer': [
+            {'type': 1, 'TTL': 120, 'data': '127.0.0.1'},
+          ],
+        }));
+      }));
+    final proxy = MainlandDohProxy(resolver: MainlandDohResolver(dio: dohDio));
+    final proxyPort = await proxy.start();
+    addTearDown(proxy.stop);
+
+    final client = HttpClient()
+      ..findProxy = (_) => 'PROXY 127.0.0.1:$proxyPort';
+    addTearDown(client.close);
+
+    final req = await client.getUrl(
+      Uri.parse('http://poisoned.example.test:${target.port}/hello'),
+    );
+    final res = await req.close();
+    final body = await utf8.decodeStream(res);
+    expect(res.statusCode, HttpStatus.ok);
+    expect(body, 'DOH_OK:/hello');
   });
 }

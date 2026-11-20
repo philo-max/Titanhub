@@ -12,6 +12,7 @@ import 'js_engine.dart';
 
 class LocalPluginRunner {
   final Map<String, JsEngine> _engines = {};
+  final Map<String, Future<JsEngine>> _engineFutures = {};
 
   final Map<String, SevenSeFunSource> _nativeSources = {};
 
@@ -63,21 +64,27 @@ class LocalPluginRunner {
   bool hasKazumiRule(String pluginId) => _kazumiSources.containsKey(pluginId);
 
   Future<JsEngine> _getEngine(String pluginId) async {
-    if (_engines.containsKey(pluginId)) {
-      return _engines[pluginId]!;
-    }
-    
-    final engine = JsEngine();
-    try {
-      // Load plugin code from assets
-      final jsCode = await rootBundle.loadString('assets/plugins/$pluginId.js');
-      await engine.loadPlugin(jsCode);
-      _engines[pluginId] = engine;
-      return engine;
-    } catch (e) {
-      engine.dispose();
-      rethrow;
-    }
+    final existing = _engines[pluginId];
+    if (existing != null) return existing;
+    final inflight = _engineFutures[pluginId];
+    if (inflight != null) return inflight;
+
+    final future = () async {
+      final engine = JsEngine();
+      try {
+        final jsCode = await rootBundle.loadString('assets/plugins/$pluginId.js');
+        await engine.loadPlugin(jsCode);
+        _engines[pluginId] = engine;
+        return engine;
+      } catch (e) {
+        engine.dispose();
+        rethrow;
+      } finally {
+        _engineFutures.remove(pluginId);
+      }
+    }();
+    _engineFutures[pluginId] = future;
+    return future;
   }
 
   SevenSeFunSource _getNativeSource(String pluginId) {

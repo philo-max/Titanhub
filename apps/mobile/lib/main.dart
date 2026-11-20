@@ -1,15 +1,22 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
+import 'core/network/mainland_channel.dart';
 import 'core/router/app_router.dart';
 import 'core/sources/kazumi/kazumi_providers.dart';
 import 'core/sources/venera/venera_providers.dart';
 import 'core/theme/app_theme.dart';
 
-void main() {
+Future<void> main() async {
   // Ensure Flutter engine and native bindings are fully initialized before startup
   WidgetsFlutterBinding.ensureInitialized();
-  
+
+  // Start local DoH CONNECT proxy to bypass Mainland ISP DNS poisoning (e.g. api.bgm.tv / lain.bgm.tv)
+  await MainlandDohProxy.instance.start();
+  HttpOverrides.global = MainlandHttpOverrides();
+
   // Initialize MediaKit native libraries (libmpv backend)
   MediaKit.ensureInitialized();
   
@@ -34,6 +41,7 @@ class TitanhubApp extends ConsumerWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
+        brightness: Brightness.dark,
         scaffoldBackgroundColor: AppTheme.background,
         colorScheme: const ColorScheme.dark(
           primary: AppTheme.primary,

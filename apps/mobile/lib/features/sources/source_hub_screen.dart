@@ -382,8 +382,10 @@ class _MainlandChannelCard extends ConsumerWidget {
                 Switch(
                   value: enabled,
                   activeThumbColor: AppTheme.primary,
-                  onChanged: (v) =>
-                      ref.read(mainlandChannelEnabledProvider.notifier).state = v,
+                  onChanged: (v) {
+                    MainlandHttpOverrides.enabled = v;
+                    ref.read(mainlandChannelEnabledProvider.notifier).state = v;
+                  },
                 ),
               ],
             ),

@@ -42,6 +42,14 @@ class MainShellScreen extends ConsumerStatefulWidget {
 
 class _MainShellScreenState extends ConsumerState<MainShellScreen> {
   int _index = 0;
+  final Set<int> _visited = {0};
+
+  void _selectTab(int value) {
+    setState(() {
+      _index = value;
+      _visited.add(value);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -50,44 +58,91 @@ class _MainShellScreenState extends ConsumerState<MainShellScreen> {
       body: IndexedStack(
         index: _index,
         children: [
-          const _AnimeHubTab(),
-          const _MangaHubTab(),
-          const _NovelHubTab(),
-          _ShelfTab(onBrowseAnime: () => setState(() => _index = 0)),
-          const SourceHubScreen(),
+          _visited.contains(0) ? const _AnimeHubTab() : const SizedBox.shrink(),
+          _visited.contains(1) ? const _MangaHubTab() : const SizedBox.shrink(),
+          _visited.contains(2) ? const _NovelHubTab() : const SizedBox.shrink(),
+          _visited.contains(3)
+              ? _ShelfTab(onBrowseAnime: () => _selectTab(0))
+              : const SizedBox.shrink(),
+          _visited.contains(4) ? const SourceHubScreen() : const SizedBox.shrink(),
         ],
       ),
-      bottomNavigationBar: NavigationBar(
-        key: const Key('main-bottom-nav'),
-        backgroundColor: AppTheme.surface,
-        indicatorColor: AppTheme.primary.withValues(alpha: 0.2),
-        selectedIndex: _index,
-        onDestinationSelected: (value) => setState(() => _index = value),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(LucideIcons.tv),
-            label: '动漫',
-          ),
-          NavigationDestination(
-            icon: Icon(LucideIcons.bookOpen),
-            label: '漫画',
-          ),
-          NavigationDestination(
-            icon: Icon(LucideIcons.fileText),
-            label: '小说',
-          ),
-          NavigationDestination(
-            icon: Icon(LucideIcons.bookmark),
-            label: '书架',
-          ),
-          NavigationDestination(
-            icon: Icon(LucideIcons.slidersHorizontal),
-            label: '源中心',
-          ),
-        ],
+      bottomNavigationBar: NavigationBarTheme(
+        data: NavigationBarThemeData(
+          backgroundColor: AppTheme.surface,
+          indicatorColor: AppTheme.primary.withValues(alpha: 0.28),
+          iconTheme: WidgetStateProperty.resolveWith((states) {
+            final selected = states.contains(WidgetState.selected);
+            return IconThemeData(
+              color: selected ? Colors.white : AppTheme.textSecondary,
+              size: 22,
+            );
+          }),
+          labelTextStyle: WidgetStateProperty.resolveWith((states) {
+            final selected = states.contains(WidgetState.selected);
+            return TextStyle(
+              fontSize: 11,
+              fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+              color: selected ? Colors.white : AppTheme.textSecondary,
+            );
+          }),
+        ),
+        child: NavigationBar(
+          key: const Key('main-bottom-nav'),
+          selectedIndex: _index,
+          onDestinationSelected: _selectTab,
+          destinations: const [
+            NavigationDestination(
+              icon: Icon(LucideIcons.tv),
+              label: '动漫',
+            ),
+            NavigationDestination(
+              icon: Icon(LucideIcons.bookOpen),
+              label: '漫画',
+            ),
+            NavigationDestination(
+              icon: Icon(LucideIcons.fileText),
+              label: '小说',
+            ),
+            NavigationDestination(
+              icon: Icon(LucideIcons.bookmark),
+              label: '书架',
+            ),
+            NavigationDestination(
+              icon: Icon(LucideIcons.slidersHorizontal),
+              label: '源中心',
+            ),
+          ],
+        ),
       ),
     );
   }
+}
+
+Widget _darkChoiceChip({
+  Key? key,
+  required String label,
+  required bool selected,
+  required VoidCallback onSelected,
+  Color selectedColor = AppTheme.primary,
+}) {
+  return ChoiceChip(
+    key: key,
+    label: Text(
+      label,
+      style: TextStyle(
+        fontSize: 12,
+        fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+        color: selected ? Colors.white : AppTheme.textSecondary,
+      ),
+    ),
+    selected: selected,
+    showCheckmark: false,
+    backgroundColor: AppTheme.surface,
+    selectedColor: selectedColor,
+    side: BorderSide(color: selected ? selectedColor : AppTheme.border),
+    onSelected: (_) => onSelected(),
+  );
 }
 
 class _HubHeader extends StatelessWidget {
@@ -150,6 +205,8 @@ class _HubHeader extends StatelessWidget {
                     Expanded(
                       child: Text(
                         hint,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                             fontSize: 13, color: AppTheme.textSecondary),
                       ),
@@ -202,7 +259,7 @@ class _AnimeHubTabState extends ConsumerState<_AnimeHubTab> {
         const SliverToBoxAdapter(
           child: _HubHeader(
             title: 'Titanhub · 番剧',
-            hint: '点击搜索番剧名、标签或直达可用播放源…',
+            hint: '搜索番剧、标签或直达播放源…',
             defaultType: MediaTypeFilter.anime,
           ),
         ),
@@ -219,12 +276,11 @@ class _AnimeHubTabState extends ConsumerState<_AnimeHubTab> {
                       for (final tab in _animeRankingTabs)
                         Padding(
                           padding: const EdgeInsets.only(right: 8),
-                          child: ChoiceChip(
+                          child: _darkChoiceChip(
                             key: Key('anime-ranking-$tab'),
-                            label: Text(tab, style: const TextStyle(fontSize: 12)),
+                            label: tab,
                             selected: tab == _rankingTab,
-                            selectedColor: AppTheme.primary.withValues(alpha: 0.25),
-                            onSelected: (_) => setState(() => _rankingTab = tab),
+                            onSelected: () => setState(() => _rankingTab = tab),
                           ),
                         ),
                     ],
@@ -329,22 +385,27 @@ class _MangaHubTabState extends ConsumerState<_MangaHubTab> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 6,
-                  children: [
-                    for (final tag in _mangaHotTags)
-                      ActionChip(
-                        label: Text(tag, style: const TextStyle(fontSize: 12)),
-                        onPressed: () => context.push(_searchRoute(
-                          type: MediaTypeFilter.manga,
-                          query: tag,
-                        )),
-                      ),
-                  ],
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      for (final tag in _mangaHotTags)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: ActionChip(
+                            visualDensity: VisualDensity.compact,
+                            label: Text('#$tag', style: const TextStyle(fontSize: 11)),
+                            onPressed: () => context.push(_searchRoute(
+                              type: MediaTypeFilter.manga,
+                              query: tag,
+                            )),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
                 if (mangaSources.isNotEmpty) ...[
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
                   const Text('漫画来源发现页',
                       style: TextStyle(
                           fontSize: 13,
@@ -358,13 +419,10 @@ class _MangaHubTabState extends ConsumerState<_MangaHubTab> {
                         for (final src in mangaSources)
                           Padding(
                             padding: const EdgeInsets.only(right: 8),
-                            child: ChoiceChip(
-                              label: Text(src.name,
-                                  style: const TextStyle(fontSize: 12)),
+                            child: _darkChoiceChip(
+                              label: src.name,
                               selected: src.id == currentSourceId,
-                              selectedColor:
-                                  AppTheme.primary.withValues(alpha: 0.25),
-                              onSelected: (_) => setState(() {
+                              onSelected: () => setState(() {
                                 _selectedSourceId = src.id;
                                 _selectedTab = null;
                               }),
@@ -463,12 +521,11 @@ class _MangaSourceExploreSliver extends ConsumerWidget {
                       for (final tab in tabs)
                         Padding(
                           padding: const EdgeInsets.only(right: 8),
-                          child: ChoiceChip(
-                            label: Text(tab, style: const TextStyle(fontSize: 12)),
+                          child: _darkChoiceChip(
+                            label: tab,
                             selected: tab == activeTab,
-                            selectedColor:
-                                AppTheme.accent.withValues(alpha: 0.25),
-                            onSelected: (_) => onSelectTab(tab),
+                            selectedColor: AppTheme.accent,
+                            onSelected: () => onSelectTab(tab),
                           ),
                         ),
                     ],
@@ -930,12 +987,11 @@ class _NovelHubTabState extends ConsumerState<_NovelHubTab> {
                     for (final tab in _novelTabs)
                       Padding(
                         padding: const EdgeInsets.only(right: 8),
-                        child: ChoiceChip(
+                        child: _darkChoiceChip(
                           key: Key('novel-tab-$tab'),
-                          label: Text(tab, style: const TextStyle(fontSize: 12)),
+                          label: tab,
                           selected: tab == _activeTab,
-                          selectedColor: AppTheme.primary.withValues(alpha: 0.25),
-                          onSelected: (_) => setState(() => _activeTab = tab),
+                          onSelected: () => setState(() => _activeTab = tab),
                         ),
                       ),
                     const Spacer(),

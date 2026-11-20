@@ -138,6 +138,7 @@ class JsEngine {
   final Set<String> _pendingRequests = {};
   final Duration callTimeout;
   bool _disposed = false;
+  Future<void> _callQueue = Future<void>.value();
 
   static const Duration _runtimeGracePeriod = Duration(milliseconds: 250);
 
@@ -484,7 +485,19 @@ class JsEngine {
   }
 
   /// Calls a method on the loaded plugin and returns the result parsed into Dart objects
-  Future<dynamic> callPluginMethod(String methodName, [List<dynamic>? args]) async {
+  Future<dynamic> callPluginMethod(String methodName, [List<dynamic>? args]) {
+    final completer = Completer<dynamic>();
+    _callQueue = _callQueue.catchError((_) {}).then((_) async {
+      try {
+        completer.complete(await _callPluginMethodLocked(methodName, args));
+      } catch (e, st) {
+        completer.completeError(e, st);
+      }
+    });
+    return completer.future;
+  }
+
+  Future<dynamic> _callPluginMethodLocked(String methodName, [List<dynamic>? args]) async {
     if (_disposed) {
       throw StateError('引擎已释放，无法调用插件方法');
     }

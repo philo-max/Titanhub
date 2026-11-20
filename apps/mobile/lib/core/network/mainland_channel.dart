@@ -1,3 +1,7 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -98,5 +102,148 @@ class MainlandDohResolver {
       }
     }
     return null;
+  }
+}
+
+/// Local loopback HTTP/HTTPS `CONNECT` proxy that resolves hostnames via
+/// Mainland-reachable DoH (`223.5.5.5` / `1.12.12.12`) while letting Dart's
+/// `HttpClient` perform full native TLS SNI + certificate validation.
+class MainlandDohProxy {
+  MainlandDohProxy({MainlandDohResolver? resolver})
+      : _resolver = resolver ?? MainlandDohResolver();
+
+  static final MainlandDohProxy instance = MainlandDohProxy();
+
+  final MainlandDohResolver _resolver;
+  ServerSocket? _server;
+
+  int? get port => _server?.port;
+
+  Future<int> start() async {
+    if (_server != null) return _server!.port;
+    final srv = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    _server = srv;
+    srv.listen(_handleClient);
+    return srv.port;
+  }
+
+  Future<void> stop() async {
+    await _server?.close();
+    _server = null;
+  }
+
+  void _handleClient(Socket client) {
+    final buf = <int>[];
+    Socket? upstream;
+    late StreamSubscription<List<int>> sub;
+
+    sub = client.listen(
+      (chunk) async {
+        if (upstream != null) {
+          upstream!.add(chunk);
+          return;
+        }
+        buf.addAll(chunk);
+        final headerText = latin1.decode(buf, allowInvalid: true);
+        final headerEnd = headerText.indexOf('\r\n\r\n');
+        if (headerEnd < 0) return;
+
+        sub.pause();
+        try {
+          final firstLineEnd = headerText.indexOf('\r\n');
+          if (firstLineEnd < 0) {
+            client.destroy();
+            return;
+          }
+          final parts = headerText.substring(0, firstLineEnd).split(' ');
+          if (parts.length < 3) {
+            client.destroy();
+            return;
+          }
+          final method = parts[0].toUpperCase();
+          final targetArg = parts[1];
+          final leftover = buf.sublist(headerEnd + 4);
+
+          if (method == 'CONNECT') {
+            final colon = targetArg.lastIndexOf(':');
+            final host = colon > 0 ? targetArg.substring(0, colon) : targetArg;
+            final port = colon > 0
+                ? (int.tryParse(targetArg.substring(colon + 1)) ?? 443)
+                : 443;
+            final resolvedIp = await _resolver.resolveA(host);
+            upstream = await Socket.connect(
+              resolvedIp ?? host,
+              port,
+              timeout: const Duration(seconds: 10),
+            );
+            client.write('HTTP/1.1 200 Connection Established\r\n\r\n');
+            if (leftover.isNotEmpty) upstream!.add(leftover);
+          } else {
+            final uri = Uri.tryParse(targetArg);
+            if (uri == null || uri.host.isEmpty) {
+              client.write('HTTP/1.1 400 Bad Request\r\n\r\n');
+              client.destroy();
+              return;
+            }
+            final host = uri.host;
+            final port = uri.hasPort ? uri.port : (uri.scheme == 'https' ? 443 : 80);
+            final resolvedIp = await _resolver.resolveA(host);
+            upstream = await Socket.connect(
+              resolvedIp ?? host,
+              port,
+              timeout: const Duration(seconds: 10),
+            );
+            final relPath = uri.path.isEmpty ? '/' : uri.path;
+            final fullPath = uri.hasQuery ? '$relPath?${uri.query}' : relPath;
+            final rebuiltHead =
+                '$method $fullPath ${parts[2]}${headerText.substring(firstLineEnd, headerEnd + 4)}';
+            upstream!.add(latin1.encode(rebuiltHead));
+            if (leftover.isNotEmpty) upstream!.add(leftover);
+          }
+
+          upstream!.listen(
+            client.add,
+            onDone: client.destroy,
+            onError: (_) => client.destroy(),
+          );
+          sub.resume();
+        } catch (_) {
+          try {
+            client.write('HTTP/1.1 502 Bad Gateway\r\n\r\n');
+          } catch (_) {}
+          client.destroy();
+        }
+      },
+      onDone: () => upstream?.destroy(),
+      onError: (_) => upstream?.destroy(),
+    );
+  }
+}
+
+/// Global [HttpOverrides] routing domain requests through [MainlandDohProxy]
+/// when Mainland DoH mode is enabled, while keeping localhost / IP literals direct.
+class MainlandHttpOverrides extends HttpOverrides {
+  MainlandHttpOverrides({MainlandDohProxy? proxy})
+      : _proxy = proxy ?? MainlandDohProxy.instance;
+
+  static bool enabled = true;
+
+  final MainlandDohProxy _proxy;
+
+  @override
+  HttpClient createHttpClient(SecurityContext? context) {
+    final client = super.createHttpClient(context);
+    client.findProxy = (Uri uri) {
+      final port = _proxy.port;
+      if (!enabled || port == null) return 'DIRECT';
+      final host = uri.host;
+      if (host.isEmpty ||
+          host == 'localhost' ||
+          InternetAddress.tryParse(host) != null) {
+        return 'DIRECT';
+      }
+      return 'PROXY 127.0.0.1:$port';
+    };
+    return client;
   }
 }
