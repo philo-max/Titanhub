@@ -256,7 +256,7 @@ class DetailScreen extends ConsumerWidget {
                               final params = <String, String>{
                                 'type': targetType.name,
                                 'q': 'tag:$genre',
-                                if (isManga || isNovel) 'source': widget.pluginId,
+                                if (isManga || isNovel) 'source': pluginId,
                               };
                               context.push(Uri(path: '/search', queryParameters: params).toString());
                             },
