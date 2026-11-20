@@ -2,6 +2,7 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../sources/kazumi/kazumi_rule.dart';
 import '../sources/kazumi/kazumi_source.dart';
+import '../sources/novel/legado_book_source.dart';
 import '../sources/seven_se_fun_source.dart';
 import '../sync/webdav_config_store.dart';
 import '../sources/venera/venera_models.dart';
@@ -17,6 +18,12 @@ class LocalPluginRunner {
   final Map<String, KazumiSource> _kazumiSources = {};
 
   final Map<String, VeneraSource> _veneraSources = {};
+
+  final Map<String, LegadoRuleRunner> _legadoSources = {};
+
+  void registerLegadoSource(String id, LegadoBookSource source) {
+    _legadoSources[id] = LegadoRuleRunner(source: source);
+  }
 
   void registerVeneraSource(
     InstalledVeneraSource meta,
@@ -134,6 +141,24 @@ class LocalPluginRunner {
     final venera = _veneraSources[pluginId];
     if (venera != null) {
       return venera.call(method, args);
+    }
+    final legado = _legadoSources[pluginId];
+    if (legado != null) {
+      switch (method) {
+        case 'search':
+          return legado.search('${args.first}');
+        case 'getDetail':
+          return {
+            'id': '${args.first}',
+            'title': '${args.first}',
+            'cover': '',
+            'description': '来自 Legado 书源：${legado.source.name}',
+          };
+        case 'getChapters':
+          return legado.getChapters('${args.first}');
+        case 'getContent':
+          return legado.getContent('${args.first}');
+      }
     }
     final engine = await _getEngine(pluginId);
     return await engine.callPluginMethod(method, args);

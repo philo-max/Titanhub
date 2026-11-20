@@ -4,8 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../core/sandbox/local_plugin_runner.dart';
 import '../../../core/sources/local_sources.dart';
 import '../../../core/sources/media_source.dart';
+import '../../../core/sources/novel/legado_book_source.dart';
 import '../../../core/storage/app_database.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../media/models/media_models.dart';
@@ -50,6 +52,7 @@ class _MainShellScreenState extends ConsumerState<MainShellScreen> {
         children: [
           const _AnimeHubTab(),
           const _MangaHubTab(),
+          const _NovelHubTab(),
           _ShelfTab(onBrowseAnime: () => setState(() => _index = 0)),
           const SourceHubScreen(),
         ],
@@ -68,6 +71,10 @@ class _MainShellScreenState extends ConsumerState<MainShellScreen> {
           NavigationDestination(
             icon: Icon(LucideIcons.bookOpen),
             label: '漫画',
+          ),
+          NavigationDestination(
+            icon: Icon(LucideIcons.fileText),
+            label: '小说',
           ),
           NavigationDestination(
             icon: Icon(LucideIcons.bookmark),
@@ -799,6 +806,198 @@ class _EmptyHubBanner extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+const List<String> _novelTabs = ['电击文库', '轻小说榜'];
+
+class _NovelHubTab extends ConsumerStatefulWidget {
+  const _NovelHubTab();
+
+  @override
+  ConsumerState<_NovelHubTab> createState() => _NovelHubTabState();
+}
+
+class _NovelHubTabState extends ConsumerState<_NovelHubTab> {
+  String _activeTab = _novelTabs.first;
+
+  Future<void> _showImportLegadoDialog() async {
+    final controller = TextEditingController();
+    final raw = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        title: const Text('导入 Legado 书源 (JSON)',
+            style: TextStyle(color: AppTheme.textPrimary, fontSize: 16)),
+        content: TextField(
+          controller: controller,
+          maxLines: 6,
+          style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12),
+          decoration: const InputDecoration(
+            hintText: '粘贴单个或数组格式的 Legado 书源 JSON…',
+            hintStyle: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, controller.text.trim()),
+            child: const Text('导入'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (raw == null || raw.isEmpty || !mounted) return;
+    try {
+      final parsed = LegadoBookSource.parseList(raw);
+      if (parsed.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('未识别到有效的 Legado 书源')),
+        );
+        return;
+      }
+      final runner = ref.read(localPluginRunnerProvider);
+      final added = <MediaSource>[];
+      final addedIds = <String>{};
+      for (var i = 0; i < parsed.length; i++) {
+        final s = parsed[i];
+        final id = 'legado-${s.name.hashCode}-$i';
+        runner.registerLegadoSource(id, s);
+        addedIds.add(id);
+        added.add(MediaSource(
+          id: id,
+          name: s.name,
+          types: const ['novel'],
+          capabilities: const {
+            MediaCapability.search,
+            MediaCapability.detail,
+            MediaCapability.chapters,
+            MediaCapability.content,
+          },
+        ));
+      }
+      ref.read(installedNovelSourcesProvider.notifier).update((list) => [...list, ...added]);
+      ref.read(enabledSourceIdsProvider.notifier).update((s) => {...s, ...addedIds});
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('已导入 ${added.length} 个 Legado 小说源')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('书源 JSON 解析失败：$e')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final activeSources = ref.watch(activeSourcesProvider);
+    final novelSources = [
+      for (final s in activeSources)
+        if (s.types.contains('novel')) s,
+    ];
+    final hasBangumi = ref.watch(enabledSourceIdsProvider).contains('bangumi');
+    final exploreAsync = hasBangumi
+        ? ref.watch(sourceExploreItemsProvider(
+            (pluginId: 'bangumi', tab: _activeTab, mediaType: 'novel'),
+          ))
+        : const AsyncValue<List<MediaItem>>.data([]);
+
+    return CustomScrollView(
+      slivers: [
+        const SliverToBoxAdapter(
+          child: _HubHeader(
+            title: 'Titanhub · 轻小说',
+            hint: '搜索电击文库、轻小说或已导入书源…',
+            defaultType: MediaTypeFilter.novel,
+          ),
+        ),
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    for (final tab in _novelTabs)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: ChoiceChip(
+                          key: Key('novel-tab-$tab'),
+                          label: Text(tab, style: const TextStyle(fontSize: 12)),
+                          selected: tab == _activeTab,
+                          selectedColor: AppTheme.primary.withValues(alpha: 0.25),
+                          onSelected: (_) => setState(() => _activeTab = tab),
+                        ),
+                      ),
+                    const Spacer(),
+                    TextButton.icon(
+                      key: const Key('novel-import-legado'),
+                      onPressed: _showImportLegadoDialog,
+                      icon: const Icon(LucideIcons.plus, size: 14),
+                      label: const Text('导入书源', style: TextStyle(fontSize: 12)),
+                    ),
+                  ],
+                ),
+                if (novelSources.where((s) => s.id != 'bangumi').isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      for (final src in novelSources.where((s) => s.id != 'bangumi'))
+                        ActionChip(
+                          label: Text(src.name, style: const TextStyle(fontSize: 11)),
+                          onPressed: () => context.push(_searchRoute(
+                            type: MediaTypeFilter.novel,
+                            sourceId: src.id,
+                          )),
+                        ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+        exploreAsync.when(
+          loading: () => const SliverToBoxAdapter(
+            child: Padding(
+              padding: EdgeInsets.symmetric(vertical: 48),
+              child: Center(
+                  child: CircularProgressIndicator(color: AppTheme.primary)),
+            ),
+          ),
+          error: (err, _) => SliverToBoxAdapter(
+            child: _EmptyHubBanner(
+              message: '小说榜单加载失败：$err',
+              actionLabel: '前往搜索小说',
+              onAction: () =>
+                  context.push(_searchRoute(type: MediaTypeFilter.novel)),
+            ),
+          ),
+          data: (items) {
+            if (items.isEmpty) {
+              return SliverToBoxAdapter(
+                child: _EmptyHubBanner(
+                  message: '暂无「$_activeTab」数据，可导入 Legado 书源或前往搜索。',
+                  actionLabel: '导入 Legado 书源',
+                  onAction: _showImportLegadoDialog,
+                ),
+              );
+            }
+            return _MediaPosterGrid(items: items);
+          },
+        ),
+        const SliverToBoxAdapter(child: SizedBox(height: 24)),
+      ],
     );
   }
 }

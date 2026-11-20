@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../core/network/mainland_channel.dart';
 import '../../core/sandbox/local_plugin_runner.dart';
 import '../../core/sources/local_sources.dart';
 import '../../core/sources/unified/source_health.dart';
@@ -37,6 +38,8 @@ class SourceHubScreen extends ConsumerWidget {
                   style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
               const SizedBox(height: 12),
               const _SourceHealthCard(),
+              const SizedBox(height: 12),
+              const _MainlandChannelCard(),
               const SizedBox(height: 12),
               for (final kind in SourceKind.values)
                 if (kind != SourceKind.movie) _KindCard(kind: kind),
@@ -295,6 +298,114 @@ class _SourceHealthCardState extends ConsumerState<_SourceHealthCard> {
                 ),
               ),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MainlandChannelCard extends ConsumerWidget {
+  const _MainlandChannelCard();
+
+  Future<void> _editRelayUrl(BuildContext context, WidgetRef ref) async {
+    final current = ref.read(edgeRelayUrlProvider) ?? '';
+    final controller = TextEditingController(text: current);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        title: const Text('可选边缘中转加速地址',
+            style: TextStyle(color: AppTheme.textPrimary, fontSize: 16)),
+        content: TextField(
+          controller: controller,
+          style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
+          decoration: const InputDecoration(
+            hintText: '如 https://your-worker.workers.dev/?url=',
+            hintStyle: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, ''),
+            child: const Text('清空'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, controller.text.trim()),
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (result != null) {
+      ref.read(edgeRelayUrlProvider.notifier).state =
+          result.isEmpty ? null : result;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final enabled = ref.watch(mainlandChannelEnabledProvider);
+    final relay = ref.watch(edgeRelayUrlProvider);
+    return Card(
+      key: const Key('mainland-channel-card'),
+      color: AppTheme.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: const BorderSide(color: AppTheme.border),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(LucideIcons.globe, color: AppTheme.accent, size: 18),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('大陆直连网络通道',
+                          style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.textPrimary)),
+                      SizedBox(height: 2),
+                      Text('优先阿里/腾讯 DoH (223.5.5.5 / 1.12.12.12) 与 jsDelivr/gh-proxy 镜像。',
+                          style: TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+                    ],
+                  ),
+                ),
+                Switch(
+                  value: enabled,
+                  activeThumbColor: AppTheme.primary,
+                  onChanged: (v) =>
+                      ref.read(mainlandChannelEnabledProvider.notifier).state = v,
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    relay == null || relay.isEmpty
+                        ? '边缘中转代理：未配置（海外被墙源可选填）'
+                        : '边缘中转代理：$relay',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => _editRelayUrl(context, ref),
+                  child: const Text('配置中转', style: TextStyle(fontSize: 12)),
+                ),
+              ],
+            ),
           ],
         ),
       ),

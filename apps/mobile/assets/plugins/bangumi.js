@@ -16,6 +16,23 @@ const plugin = {
 
   async search(query) {
     const raw = (query || '').trim();
+    if (raw.startsWith('novel-tag:')) {
+      const tag = raw.slice(10).trim();
+      if (!tag) return [];
+      const res = await fetch(API + '/v0/search/subjects?limit=20', {
+        method: 'POST',
+        headers: { ...HEADERS, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keyword: '', filter: { type: [1], tag: [tag] }, sort: 'heat' }),
+      });
+      const data = JSON.parse(await res.text());
+      const list = (data && data.data) || [];
+      return list.map((item) => ({
+        id: String(item.id),
+        title: item.name_cn || item.name || '未命名',
+        cover: pickCover(item.images),
+        description: item.summary || '',
+      }));
+    }
     if (raw.startsWith('tag:')) {
       const tag = raw.slice(4).trim();
       if (!tag) return [];
@@ -52,6 +69,23 @@ const plugin = {
 
   async explore(tabOrType) {
     const key = String(tabOrType || '').trim();
+    if (key === '电击文库' || key === '轻小说榜' || key === 'novel') {
+      const tag = key === '电击文库' ? '电击文库' : '轻小说';
+      const res = await fetch(API + '/v0/search/subjects?limit=24', {
+        method: 'POST',
+        headers: { ...HEADERS, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keyword: '', filter: { type: [1], tag: [tag] }, sort: 'heat' }),
+      });
+      const data = JSON.parse(await res.text());
+      const list = (data && data.data) || [];
+      return list.map((item) => ({
+        id: String(item.id),
+        title: item.name_cn || item.name || '未命名',
+        cover: pickCover(item.images),
+        description: item.summary || '',
+        updateInfo: item.rating && item.rating.score ? '★ ' + item.rating.score : tag,
+      }));
+    }
     const sortMap = { '热门榜': 'heat', '高分榜': 'rank', '新作榜': 'date' };
     if (sortMap[key]) {
       const res = await fetch(API + '/v0/search/subjects?limit=24', {

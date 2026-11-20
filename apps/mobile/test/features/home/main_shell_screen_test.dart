@@ -91,6 +91,13 @@ void main() {
     expect(find.text('Titanhub · 漫画'), findsOneWidget);
     expect(find.text('漫画来源发现页'), findsOneWidget);
 
+    await tester.tap(find.text('小说').last);
+    await tester.pumpAndSettle();
+    expect(find.text('Titanhub · 轻小说'), findsOneWidget);
+    expect(find.byKey(const Key('novel-tab-电击文库')), findsOneWidget);
+    expect(find.byKey(const Key('novel-tab-轻小说榜')), findsOneWidget);
+    expect(find.byKey(const Key('novel-import-legado')), findsOneWidget);
+
     await tester.tap(find.text('书架').last);
     await tester.pumpAndSettle();
     expect(find.text('我的书架 & 记录'), findsOneWidget);
