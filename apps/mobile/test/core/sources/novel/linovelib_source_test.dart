@@ -46,7 +46,20 @@ void main() {
           data: '''
             <div id="TextContent" class="TextContent">
               <p>「欢迎来到学园都市。」</p>
-              <p>故事由此展开。</p>
+              <p>第一页末尾（內容加載失敗！請刷新或更換瀏覽器）</p>
+            </div>
+            <script>var url_next="/novel/2906/242200_2.html";</script>
+          ''',
+        ));
+        return;
+      }
+      if (path == '/novel/2906/242200_2.html') {
+        handler.resolve(Response(
+          requestOptions: options,
+          statusCode: 200,
+          data: '''
+            <div id="TextContent" class="TextContent">
+              <p>第二页继续展开。</p>
             </div>
           ''',
         ));
@@ -68,6 +81,6 @@ void main() {
     expect(chapters.first['title'], '序章');
 
     final text = await src.getContent('2906/242200');
-    expect(text, '「欢迎来到学园都市。」\n\n故事由此展开。');
+    expect(text, '「欢迎来到学园都市。」\n\n第一页末尾\n\n第二页继续展开。');
   });
 }

@@ -155,6 +155,10 @@ class DetailScreen extends ConsumerWidget {
                             imageUrl: detail.cover,
                             fit: BoxFit.cover,
                             placeholder: (_, __) => Container(color: Colors.grey[900]),
+                            errorWidget: (_, __, ___) => Container(
+                              color: Colors.grey[900],
+                              child: const Icon(LucideIcons.imageOff, color: AppTheme.textSecondary),
+                            ),
                           ),
                         ),
                       ),
@@ -191,6 +195,8 @@ class DetailScreen extends ConsumerWidget {
                       if (!source.supports(MediaCapability.video) &&
                           !source.supports(MediaCapability.images) &&
                           !source.supports(MediaCapability.content)) ...[
+                        const SizedBox(height: 12),
+                        _AutoMatchedSourceBar(title: detail.title),
                         const SizedBox(height: 10),
                         Center(
                           child: Wrap(
@@ -553,6 +559,86 @@ class DetailScreen extends ConsumerWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _AutoMatchedSourceBar extends ConsumerWidget {
+  const _AutoMatchedSourceBar({required this.title});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final matchesAsync = ref.watch(autoMatchedSourcesProvider(title));
+    return matchesAsync.when(
+      loading: () => const Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: 14,
+            height: 14,
+            child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary),
+          ),
+          SizedBox(width: 8),
+          Text(
+            '正在自动匹配可用播放/阅读源…',
+            style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+          ),
+        ],
+      ),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (matches) {
+        if (matches.isEmpty) return const SizedBox.shrink();
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: AppTheme.surface,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppTheme.primary.withValues(alpha: 0.45)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(
+                children: [
+                  Icon(LucideIcons.sparkles, size: 15, color: AppTheme.primary),
+                  SizedBox(width: 6),
+                  Text(
+                    '已自动接通可用源 · 点击直达播放/阅读',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                children: [
+                  for (final item in matches)
+                    if (item.pluginId != null && item.pluginId!.isNotEmpty)
+                      FilledButton.tonalIcon(
+                        key: Key('auto-match-${item.pluginId}'),
+                        onPressed: () => context.push(
+                          '/detail/${Uri.encodeComponent(item.pluginId!)}/${Uri.encodeComponent(item.id)}',
+                        ),
+                        icon: const Icon(LucideIcons.zap, size: 14),
+                        label: Text(
+                          item.pluginName ?? item.pluginId!,
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                      ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

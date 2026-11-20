@@ -288,6 +288,56 @@ final sourceExploreItemsProvider = FutureProvider.family<List<MediaItem>, Explor
   ];
 });
 
+/// Automatically probes enabled playable/readable sources in the background for
+/// a metadata-only [title] (e.g. from Bangumi rankings) and returns the best
+/// working matches so the user can jump straight to playback/reading in 1 tap.
+final autoMatchedSourcesProvider = FutureProvider.autoDispose
+    .family<List<MediaItem>, String>((ref, title) async {
+  final query = title.trim();
+  if (query.isEmpty) return const <MediaItem>[];
+  final runner = ref.watch(localPluginRunnerProvider);
+  final active = ref.watch(activeSourcesProvider);
+  final candidates = [
+    for (final s in active)
+      if (s.supports(MediaCapability.video) || s.supports(MediaCapability.content))
+        s,
+  ].take(8).toList();
+  if (candidates.isEmpty) return const <MediaItem>[];
+
+  final lower = query.toLowerCase();
+  final perSource = await Future.wait<MediaItem?>([
+    for (final source in candidates)
+      () async {
+        try {
+          final raw = await runner
+              .call(source.id, 'search', [query])
+              .timeout(const Duration(seconds: 6));
+          if (raw is! List || raw.isEmpty) return null;
+          Map<String, dynamic>? best;
+          for (final entry in raw) {
+            if (entry is! Map) continue;
+            final map = Map<String, dynamic>.from(entry);
+            final t = '${map['title'] ?? ''}'.toLowerCase();
+            if (t == lower || t.contains(lower) || lower.contains(t)) {
+              best = map;
+              break;
+            }
+            best ??= map;
+          }
+          if (best == null) return null;
+          return MediaItem.fromJson({
+            ...best,
+            'pluginId': source.id,
+            'pluginName': source.name,
+          });
+        } catch (_) {
+          return null;
+        }
+      }(),
+  ]);
+  return perSource.whereType<MediaItem>().toList();
+});
+
 final novelContentProvider =
     FutureProvider.family<String, ({String pluginId, String chapterId})>((ref, arg) async {
   return _withSource<String>(

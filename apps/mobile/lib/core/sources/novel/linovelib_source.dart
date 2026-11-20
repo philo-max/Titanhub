@@ -202,30 +202,72 @@ class LinovelibSource {
     return chapters;
   }
 
+  static bool _isNoiseParagraph(String text) {
+    return text.contains('內容加載失敗') ||
+        text.contains('内容加载失败') ||
+        text.contains('請刷新或更換瀏覽器') ||
+        text.contains('请刷新或更换浏览器');
+  }
+
+  static List<String> _extractParagraphs(String html) {
+    final doc = html_parser.parse(html);
+    final container = doc.querySelector('#TextContent') ?? doc.querySelector('.TextContent');
+    if (container == null) return const [];
+    final paragraphs = <String>[];
+    for (final p in container.querySelectorAll('p')) {
+      final t = p.text
+          .replaceAll(RegExp(r'（?(?:內容加載失敗|内容加载失败)[^）\n]*）?'), '')
+          .trim();
+      if (t.isNotEmpty && !_isNoiseParagraph(t)) {
+        paragraphs.add(t);
+      }
+    }
+    if (paragraphs.isNotEmpty) return paragraphs;
+    final raw = container.text
+        .replaceAll(RegExp(r'（?(?:內容加載失敗|内容加载失败)[^）\n]*）?'), '')
+        .replaceAll(RegExp(r'\r\n?'), '\n')
+        .replaceAll(RegExp(r'\n{3,}'), '\n\n')
+        .trim();
+    return raw.isEmpty ? const [] : [raw];
+  }
+
   Future<String> getContent(String chapterId) async {
     final normalized = chapterId.trim();
-    final path = normalized.startsWith('http')
+    final initialPath = normalized.startsWith('http')
         ? normalized
         : (normalized.endsWith('.html')
             ? (normalized.startsWith('/') ? normalized : '/novel/$normalized')
             : '/novel/$normalized.html');
-    final res = await _dio.get<String>(path);
-    final doc = html_parser.parse(res.data ?? '');
-    final container = doc.querySelector('#TextContent') ?? doc.querySelector('.TextContent');
-    if (container == null) {
-      throw StateError('未找到小说正文区域（可能触发站点验证）');
+
+    final idMatch = RegExp(r'/novel/(\d+)/(\d+)(?:_\d+)?\.html').firstMatch(initialPath);
+    final novelId = idMatch?.group(1);
+    final baseCid = idMatch?.group(2);
+
+    final allParagraphs = <String>[];
+    final visited = <String>{};
+    String? nextPath = initialPath;
+
+    for (var page = 0; page < 10 && nextPath != null; page++) {
+      if (!visited.add(nextPath)) break;
+      final res = await _dio.get<String>(nextPath);
+      final html = res.data ?? '';
+      final paras = _extractParagraphs(html);
+      if (page == 0 && paras.isEmpty) {
+        throw StateError('未找到小说正文区域（可能触发站点验证）');
+      }
+      allParagraphs.addAll(paras);
+
+      nextPath = null;
+      if (novelId != null && baseCid != null) {
+        final nextPageNum = page + 2;
+        final subPattern = RegExp('/novel/$novelId/${baseCid}_$nextPageNum\\.html');
+        final m = subPattern.firstMatch(html);
+        if (m != null) {
+          nextPath = m.group(0);
+        }
+      }
     }
-    final paragraphs = [
-      for (final p in container.querySelectorAll('p'))
-        if (p.text.trim().isNotEmpty) p.text.trim(),
-    ];
-    if (paragraphs.isNotEmpty) {
-      return paragraphs.join('\n\n');
-    }
-    return container.text
-        .replaceAll(RegExp(r'\r\n?'), '\n')
-        .replaceAll(RegExp(r'\n{3,}'), '\n\n')
-        .trim();
+    return allParagraphs.join('\n\n');
   }
 
   void dispose() {

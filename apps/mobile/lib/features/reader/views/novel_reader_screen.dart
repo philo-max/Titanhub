@@ -13,6 +13,8 @@ import '../../tracking/sync_provider.dart';
 
 enum NovelTheme { obsidian, sepia, mint, light }
 
+enum NovelReadMode { scroll, paged }
+
 class NovelReaderScreen extends ConsumerStatefulWidget {
   final String pluginId;
   final String mediaId;
@@ -33,11 +35,15 @@ class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen>
     with WidgetsBindingObserver {
   // Reading preferences
   NovelTheme _theme = NovelTheme.obsidian;
+  NovelReadMode _readMode = NovelReadMode.scroll;
   double _fontSize = 18.0;
+  double _lineHeight = 1.8;
   bool _serifFont = true;
   bool _settingsVisible = false;
+  int _currentPage = 0;
 
   final ScrollController _scrollController = ScrollController();
+  final PageController _pageController = PageController();
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   late final String _mediaType;
@@ -147,6 +153,47 @@ class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen>
     }
   }
 
+  void _savePagedProgress(double progress) {
+    if (_disposed) return;
+    final clamped = progress.clamp(0.0, 1.0);
+    if ((clamped - _lastSavedProgress).abs() < 0.05 && clamped < 1.0) return;
+    _lastSavedProgress = clamped;
+    try {
+      _syncService.saveProgress(
+        pluginId: widget.pluginId,
+        mediaType: _mediaType,
+        mediaId: widget.mediaId,
+        chapterNo: 0,
+        chapterId: widget.chapterId,
+        chapterTitle: _chapterTitle,
+        progress: clamped,
+      );
+    } catch (_) {}
+  }
+
+  List<List<String>> _paginateParagraphs(
+    List<String> paragraphs,
+    double fontSize,
+    double lineHeight,
+  ) {
+    final charsPerPage = (520 * (18.0 / fontSize) * (1.8 / lineHeight)).round().clamp(180, 900);
+    final pages = <List<String>>[];
+    var current = <String>[];
+    var count = 0;
+    for (final p in paragraphs) {
+      final len = p.length + 24;
+      if (current.isNotEmpty && count + len > charsPerPage) {
+        pages.add(current);
+        current = <String>[];
+        count = 0;
+      }
+      current.add(p);
+      count += len;
+    }
+    if (current.isNotEmpty) pages.add(current);
+    return pages.isEmpty ? [paragraphs] : pages;
+  }
+
   @override
   void dispose() {
     _saveProgress();
@@ -154,6 +201,7 @@ class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen>
     WidgetsBinding.instance.removeObserver(this);
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
+    _pageController.dispose();
     super.dispose();
   }
 
@@ -274,6 +322,96 @@ class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen>
                     .where((p) => p.trim().isNotEmpty)
                     .toList();
 
+                if (_readMode == NovelReadMode.paged) {
+                  final pages = _paginateParagraphs(paragraphs, _fontSize, _lineHeight);
+                  final safePage = _currentPage.clamp(0, pages.length - 1);
+                  return Stack(
+                    children: [
+                      GestureDetector(
+                        behavior: HitTestBehavior.translucent,
+                        onTapUp: (details) {
+                          final width = MediaQuery.sizeOf(context).width;
+                          final dx = details.localPosition.dx;
+                          if (dx < width / 3) {
+                            if (safePage > 0) {
+                              _pageController.previousPage(
+                                duration: const Duration(milliseconds: 220),
+                                curve: Curves.easeOut,
+                              );
+                            }
+                          } else if (dx > width * 2 / 3) {
+                            if (safePage < pages.length - 1) {
+                              _pageController.nextPage(
+                                duration: const Duration(milliseconds: 220),
+                                curve: Curves.easeOut,
+                              );
+                            }
+                          } else {
+                            setState(() => _settingsVisible = !_settingsVisible);
+                          }
+                        },
+                        child: PageView.builder(
+                          key: const Key('novel-paged-view'),
+                          controller: _pageController,
+                          itemCount: pages.length,
+                          onPageChanged: (index) {
+                            setState(() => _currentPage = index);
+                            final ratio = pages.length <= 1 ? 1.0 : index / (pages.length - 1);
+                            _savePagedProgress(ratio);
+                          },
+                          itemBuilder: (context, index) {
+                            return SingleChildScrollView(
+                              padding: EdgeInsets.fromLTRB(
+                                22,
+                                18,
+                                22,
+                                56 + MediaQuery.paddingOf(context).bottom,
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  for (final p in pages[index])
+                                    Padding(
+                                      padding: const EdgeInsets.only(bottom: 16.0),
+                                      child: Text(
+                                        p.trim(),
+                                        textAlign: TextAlign.justify,
+                                        style: TextStyle(
+                                          color: config.text,
+                                          fontSize: _fontSize,
+                                          fontFamily: _serifFont ? 'serif' : 'sans-serif',
+                                          height: _lineHeight,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 12 + MediaQuery.paddingOf(context).bottom,
+                        child: Center(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.35),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              '第 ${safePage + 1} / ${pages.length} 页 · 点两侧翻页 / 中间设置',
+                              style: TextStyle(color: config.text.withValues(alpha: 0.75), fontSize: 11),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                }
+
                 _restoreScroll();
 
                 return NotificationListener<ScrollStartNotification>(
@@ -299,7 +437,7 @@ class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen>
                                 color: config.text,
                                 fontSize: _fontSize,
                                 fontFamily: _serifFont ? 'serif' : 'sans-serif',
-                                height: 1.8,
+                                height: _lineHeight,
                               ),
                             ),
                           );
@@ -447,6 +585,73 @@ class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen>
                       ),
                       const Divider(color: AppTheme.surfaceLight, height: 24),
 
+                      // Reading mode (scroll vs paged)
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            '翻页模式',
+                            style: TextStyle(color: AppTheme.textSecondary, fontSize: 10, fontWeight: FontWeight.bold),
+                          ),
+                          SegmentedButton<NovelReadMode>(
+                            segments: const [
+                              ButtonSegment(value: NovelReadMode.scroll, label: Text('上下滚动', style: TextStyle(fontSize: 11))),
+                              ButtonSegment(value: NovelReadMode.paged, label: Text('左右翻页', style: TextStyle(fontSize: 11))),
+                            ],
+                            selected: {_readMode},
+                            onSelectionChanged: (set) {
+                              setState(() {
+                                _readMode = set.first;
+                                _currentPage = 0;
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+                      const Divider(color: AppTheme.surfaceLight, height: 24),
+
+                      // Line height adjustments
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                '行距间距',
+                                style: TextStyle(color: AppTheme.textSecondary, fontSize: 10, fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '${_lineHeight.toStringAsFixed(1)}x',
+                                style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
+                          Row(
+                            children: [
+                              IconButton(
+                                icon: const Icon(LucideIcons.minus, color: Colors.white70, size: 18),
+                                onPressed: () {
+                                  setState(() {
+                                    _lineHeight = (_lineHeight - 0.1).clamp(1.3, 2.4);
+                                  });
+                                },
+                              ),
+                              IconButton(
+                                icon: const Icon(LucideIcons.plus, color: Colors.white70, size: 18),
+                                onPressed: () {
+                                  setState(() {
+                                    _lineHeight = (_lineHeight + 0.1).clamp(1.3, 2.4);
+                                  });
+                                },
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      const Divider(color: AppTheme.surfaceLight, height: 24),
+
                       // Font family toggles
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -456,7 +661,7 @@ class _NovelReaderScreenState extends ConsumerState<NovelReaderScreen>
                             style: TextStyle(color: Colors.white70, fontSize: 12),
                           ),
                           Switch(
-                            activeColor: AppTheme.primary,
+                            activeThumbColor: AppTheme.primary,
                             value: _serifFont,
                             onChanged: (val) {
                               setState(() {
