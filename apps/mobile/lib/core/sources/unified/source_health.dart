@@ -34,12 +34,18 @@ String probeQueryForSource(MediaSource source) {
   return '柯南';
 }
 
-/// Probes all searchable [sources] with bounded concurrency and returns results
-/// sorted by health status (`healthy` -> `empty` -> `failed`) and latency.
+String _compactError(Object e) {
+  final raw = e.toString().replaceFirst(RegExp(r'^Exception:\s*'), '').trim();
+  if (raw.length <= 42) return raw;
+  return '${raw.substring(0, 42)}…';
+}
+
+/// Probes all searchable [sources] end-to-end (`search` -> `getChapters` ->
+/// `getImages` / `getVideoUrl` when supported) with bounded concurrency.
 Future<List<SourceHealthResult>> probeAllSources({
   required List<MediaSource> sources,
   required LocalPluginRunner runner,
-  Duration timeout = const Duration(seconds: 8),
+  Duration timeout = const Duration(seconds: 10),
   int concurrency = 6,
   void Function(SourceHealthResult result, int completed, int total)? onProgress,
 }) async {
@@ -64,17 +70,62 @@ Future<List<SourceHealthResult>> probeAllSources({
         final raw = await runner
             .call(source.id, 'search', [probeQueryForSource(source)])
             .timeout(timeout);
-        sw.stop();
-        final count = raw is List ? raw.length : 0;
-        result = SourceHealthResult(
-          id: source.id,
-          name: source.name,
-          status: count > 0
-              ? SourceHealthStatus.healthy
-              : SourceHealthStatus.empty,
-          latencyMs: sw.elapsedMilliseconds,
-          resultCount: count,
-        );
+        final items = raw is List ? raw : const [];
+        if (items.isEmpty) {
+          sw.stop();
+          result = SourceHealthResult(
+            id: source.id,
+            name: source.name,
+            status: SourceHealthStatus.empty,
+            latencyMs: sw.elapsedMilliseconds,
+            resultCount: 0,
+          );
+        } else {
+          final firstItem = items.first;
+          final firstId = firstItem is Map ? '${firstItem['id'] ?? ''}' : '';
+          String? chainWarning;
+          if (firstId.isNotEmpty && source.supports(MediaCapability.chapters)) {
+            final chRaw = await runner
+                .call(source.id, 'getChapters', [firstId])
+                .timeout(timeout);
+            final chapters = chRaw is List ? chRaw : const [];
+            if (chapters.isEmpty) {
+              chainWarning = '无章节';
+            } else {
+              final firstCh = chapters.first;
+              final firstChId =
+                  firstCh is Map ? '${firstCh['id'] ?? ''}' : '';
+              if (firstChId.isNotEmpty &&
+                  source.supports(MediaCapability.images)) {
+                final imgRaw = await runner
+                    .call(source.id, 'getImages', [firstChId])
+                    .timeout(timeout);
+                if (imgRaw is! List || imgRaw.isEmpty) {
+                  chainWarning = '章节无图';
+                }
+              } else if (firstChId.isNotEmpty &&
+                  source.supports(MediaCapability.video)) {
+                final vidRaw = await runner
+                    .call(source.id, 'getVideoUrl', [firstChId])
+                    .timeout(timeout);
+                if (vidRaw is! List || vidRaw.isEmpty) {
+                  chainWarning = '无播放地址';
+                }
+              }
+            }
+          }
+          sw.stop();
+          result = SourceHealthResult(
+            id: source.id,
+            name: source.name,
+            status: chainWarning == null
+                ? SourceHealthStatus.healthy
+                : SourceHealthStatus.empty,
+            latencyMs: sw.elapsedMilliseconds,
+            resultCount: items.length,
+            error: chainWarning,
+          );
+        }
       } catch (e) {
         sw.stop();
         result = SourceHealthResult(
@@ -82,7 +133,7 @@ Future<List<SourceHealthResult>> probeAllSources({
           name: source.name,
           status: SourceHealthStatus.failed,
           latencyMs: sw.elapsedMilliseconds,
-          error: e.toString(),
+          error: _compactError(e),
         );
       }
       results[index] = result;

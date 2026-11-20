@@ -268,8 +268,10 @@ class _SourceHealthCardState extends ConsumerState<_SourceHealthCard> {
                     };
                     final detail = switch (r.status) {
                       SourceHealthStatus.healthy => '${r.resultCount} 条 · ${r.latencyMs}ms',
-                      SourceHealthStatus.empty => '0 条 · ${r.latencyMs}ms',
-                      SourceHealthStatus.failed => '失效 · ${r.latencyMs}ms',
+                      SourceHealthStatus.empty =>
+                        '${r.error ?? '0 条'} · ${r.latencyMs}ms',
+                      SourceHealthStatus.failed =>
+                        '${r.error ?? '失效'} · ${r.latencyMs}ms',
                     };
                     return Row(
                       children: [
