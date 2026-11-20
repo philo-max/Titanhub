@@ -1,11 +1,17 @@
 // Bangumi (bgm.tv) 开放 API 元数据插件 —— Titanhub 第一个真实网络插件。
 // 仅提供番剧资料（搜索/详情/章节/每日放送），不提供视频播放源。
-const API = 'https://api.bgm.tv';
-const HEADERS = { 'User-Agent': 'titanhub/1.0 (https://github.com/titanhub)' };
+const API = 'https://api.bgmapi.com';
+const HEADERS = { 'User-Agent': 'titanhub/1.1 (https://github.com/titanhub)' };
 
 function pickCover(images) {
   if (!images) return '';
-  return images.common || images.medium || images.large || images.grid || '';
+  const raw = images.common || images.large || images.medium || images.grid || '';
+  if (!raw) return '';
+  const normalized = raw.startsWith('http://') ? 'https://' + raw.slice(7) : raw;
+  if (normalized.indexOf('://lain.bgm.tv/') > 0 || normalized.indexOf('://api.bgm.tv/') > 0) {
+    return 'https://wsrv.nl/?url=' + encodeURIComponent(normalized.replace(/^https?:\/\//, ''));
+  }
+  return normalized;
 }
 
 const plugin = {
