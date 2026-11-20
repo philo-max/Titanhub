@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'media_source.dart';
+import 'novel/linovelib_source.dart';
 import 'seven_se_fun_source.dart';
 
 const List<MediaSource> bundledSources = [
@@ -70,10 +71,40 @@ final installedKazumiSourcesProvider = StateProvider<List<MediaSource>>((ref) =>
 
 final installedVeneraSourcesProvider = StateProvider<List<MediaSource>>((ref) => const []);
 
+final installedNovelSourcesProvider = StateProvider<List<MediaSource>>((ref) => const []);
+
+const MediaSource linovelibMediaSource = MediaSource(
+  id: LinovelibSource.pluginId,
+  name: LinovelibSource.sourceName,
+  types: ['novel'],
+  capabilities: {
+    MediaCapability.search,
+    MediaCapability.detail,
+    MediaCapability.chapters,
+    MediaCapability.content,
+  },
+);
+
+final novelBootstrapProvider = FutureProvider<void>((ref) async {
+  Future<void>.microtask(() {
+    final current = ref.read(installedNovelSourcesProvider);
+    if (!current.any((s) => s.id == linovelibMediaSource.id)) {
+      ref.read(installedNovelSourcesProvider.notifier).state = [
+        linovelibMediaSource,
+        ...current,
+      ];
+    }
+    ref
+        .read(enabledSourceIdsProvider.notifier)
+        .update((s) => {...s, linovelibMediaSource.id});
+  });
+});
+
 final localSourcesProvider = Provider<List<MediaSource>>((ref) => [
       ...bundledSources,
       ...ref.watch(installedKazumiSourcesProvider),
       ...ref.watch(installedVeneraSourcesProvider),
+      ...ref.watch(installedNovelSourcesProvider),
     ]);
 
 final sourceByIdProvider = Provider.family<MediaSource?, String>((ref, id) {

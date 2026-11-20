@@ -30,13 +30,41 @@ const String veneraShimBridge = r'''
       return typeof first === 'string' ? first.split('-')[0] : '';
     });
   }
+  function defaultCategoryOptions(s) {
+    var list = (s.categoryComics && s.categoryComics.optionList) || [];
+    return list.map(function(option) {
+      if (option.default !== undefined && option.default !== null) return option.default;
+      var first = (option.options || [])[0];
+      return typeof first === 'string' ? first.split('-')[0] : '';
+    });
+  }
   async function searchPage(keyword, page) {
     var s = src();
+    var kw = String(keyword || '').trim();
+    if (kw.indexOf('tag:') === 0) {
+      var rawTag = kw.slice(4).trim();
+      var param = null;
+      var category = rawTag;
+      var colonIdx = rawTag.indexOf(':');
+      if (colonIdx > 0 && colonIdx < rawTag.length - 1) {
+        param = rawTag.slice(0, colonIdx).trim();
+        category = rawTag.slice(colonIdx + 1).trim();
+      }
+      if (s.categoryComics && typeof s.categoryComics.load === 'function' && category) {
+        try {
+          var catRes = await s.categoryComics.load(category, param, defaultCategoryOptions(s), page);
+          if (catRes && Array.isArray(catRes.comics) && catRes.comics.length > 0) {
+            return { comics: comics(catRes.comics), maxPage: catRes.maxPage || null };
+          }
+        } catch (_) {}
+      }
+      kw = rawTag;
+    }
     if (!s.search) return { comics: [], maxPage: 1 };
     var res = typeof s.search.load === 'function'
-      ? await s.search.load(keyword, defaultOptions(s), page)
+      ? await s.search.load(kw, defaultOptions(s), page)
       : typeof s.search.loadNext === 'function'
-        ? await s.search.loadNext(keyword, defaultOptions(s), page > 1 ? String(page) : null)
+        ? await s.search.loadNext(kw, defaultOptions(s), page > 1 ? String(page) : null)
         : null;
     if (!res) throw new Error('来源没有提供搜索');
     return { comics: comics(res.comics), maxPage: res.maxPage || null };

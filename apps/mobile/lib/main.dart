@@ -6,6 +6,7 @@ import 'package:media_kit/media_kit.dart';
 import 'core/network/mainland_channel.dart';
 import 'core/router/app_router.dart';
 import 'core/sources/kazumi/kazumi_providers.dart';
+import 'core/sources/local_sources.dart';
 import 'core/sources/venera/venera_providers.dart';
 import 'core/theme/app_theme.dart';
 
@@ -35,6 +36,7 @@ class TitanhubApp extends ConsumerWidget {
     final router = ref.watch(routerProvider);
     ref.watch(kazumiBootstrapProvider);
     ref.watch(veneraBootstrapProvider);
+    ref.watch(novelBootstrapProvider);
 
     return MaterialApp.router(
       title: 'Titanhub',

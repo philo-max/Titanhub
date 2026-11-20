@@ -105,7 +105,10 @@ final searchMediaProvider =
     for (final source in sources)
       () async {
         try {
-          final argQuery = (isTagQuery && source.id == 'bangumi') ? trimmed : plainKeyword;
+          final argQuery = (isTagQuery &&
+                  (source.id == 'bangumi' || runner.hasVeneraSource(source.id)))
+              ? trimmed
+              : plainKeyword;
           final List<dynamic> raw = await runner
               .call(source.id, 'search', [argQuery])
               .timeout(_searchSourceTimeout);

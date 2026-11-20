@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../sources/kazumi/kazumi_rule.dart';
 import '../sources/kazumi/kazumi_source.dart';
 import '../sources/novel/legado_book_source.dart';
+import '../sources/novel/linovelib_source.dart';
 import '../sources/seven_se_fun_source.dart';
 import '../sync/webdav_config_store.dart';
 import '../sources/venera/venera_models.dart';
@@ -21,6 +22,8 @@ class LocalPluginRunner {
   final Map<String, VeneraSource> _veneraSources = {};
 
   final Map<String, LegadoRuleRunner> _legadoSources = {};
+
+  LinovelibSource? _linovelibSource;
 
   void registerLegadoSource(String id, LegadoBookSource source) {
     _legadoSources[id] = LegadoRuleRunner(source: source);
@@ -141,6 +144,10 @@ class LocalPluginRunner {
     if (pluginId == SevenSeFunSource.pluginId) {
       return _getNativeSource(pluginId).call(method, args);
     }
+    if (pluginId == LinovelibSource.pluginId) {
+      _linovelibSource ??= LinovelibSource();
+      return _linovelibSource!.call(method, args);
+    }
     final kazumi = _kazumiSources[pluginId];
     if (kazumi != null) {
       return kazumi.call(method, args);
@@ -188,6 +195,8 @@ class LocalPluginRunner {
       engine.dispose();
     }
     _engines.clear();
+    _linovelibSource?.dispose();
+    _linovelibSource = null;
   }
 }
 

@@ -188,19 +188,45 @@ class DetailScreen extends ConsumerWidget {
                           style: const TextStyle(fontSize: 11, color: AppTheme.textTertiary),
                         ),
                       ),
-                      if (!source.supports(MediaCapability.video) && !source.supports(MediaCapability.images)) ...[
+                      if (!source.supports(MediaCapability.video) &&
+                          !source.supports(MediaCapability.images) &&
+                          !source.supports(MediaCapability.content)) ...[
                         const SizedBox(height: 10),
                         Center(
-                          child: OutlinedButton.icon(
-                            key: const Key('detail-search-playable'),
-                            onPressed: () {
-                              ref.read(selectedMediaTypeProvider.notifier).state = MediaTypeFilter.anime;
-                              ref.read(selectedSourceIdProvider.notifier).state = null;
-                              ref.read(pendingSearchQueryProvider.notifier).state = detail.title;
-                              context.go('/');
-                            },
-                            icon: const Icon(LucideIcons.search, size: 15),
-                            label: const Text('在可用播放源中搜此番'),
+                          child: Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            alignment: WrapAlignment.center,
+                            children: [
+                              OutlinedButton.icon(
+                                key: const Key('detail-search-playable'),
+                                onPressed: () {
+                                  context.push(Uri(
+                                    path: '/search',
+                                    queryParameters: {
+                                      'type': MediaTypeFilter.anime.name,
+                                      'q': detail.title,
+                                    },
+                                  ).toString());
+                                },
+                                icon: const Icon(LucideIcons.play, size: 15),
+                                label: const Text('搜此番播放源'),
+                              ),
+                              OutlinedButton.icon(
+                                key: const Key('detail-search-novel'),
+                                onPressed: () {
+                                  context.push(Uri(
+                                    path: '/search',
+                                    queryParameters: {
+                                      'type': MediaTypeFilter.novel.name,
+                                      'q': detail.title,
+                                    },
+                                  ).toString());
+                                },
+                                icon: const Icon(LucideIcons.bookOpen, size: 15),
+                                label: const Text('搜此书小说源'),
+                              ),
+                            ],
                           ),
                         ),
                       ],
@@ -220,11 +246,19 @@ class DetailScreen extends ConsumerWidget {
                             side: const BorderSide(color: AppTheme.surfaceLight),
                             padding: const EdgeInsets.symmetric(horizontal: 4),
                             onPressed: () {
-                              final query = source?.types.contains('anime') == true
-                                  ? 'tag:$genre'
-                                  : genre;
-                              ref.read(pendingSearchQueryProvider.notifier).state = query;
-                              context.go('/');
+                              final isManga = source?.types.contains('manga') == true;
+                              final isNovel = source?.types.contains('novel') == true;
+                              final targetType = isManga
+                                  ? MediaTypeFilter.manga
+                                  : isNovel
+                                      ? MediaTypeFilter.novel
+                                      : MediaTypeFilter.anime;
+                              final params = <String, String>{
+                                'type': targetType.name,
+                                'q': 'tag:$genre',
+                                if (isManga || isNovel) 'source': widget.pluginId,
+                              };
+                              context.push(Uri(path: '/search', queryParameters: params).toString());
                             },
                           );
                         }).toList(),

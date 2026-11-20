@@ -4,10 +4,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../core/identity/media_identity.dart';
 import '../../../core/sandbox/local_plugin_runner.dart';
 import '../../../core/sources/local_sources.dart';
 import '../../../core/sources/media_source.dart';
 import '../../../core/sources/novel/legado_book_source.dart';
+import '../../../core/sources/novel/linovelib_source.dart';
 import '../../../core/storage/app_database.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../media/models/media_models.dart';
@@ -587,6 +589,101 @@ class _ShelfTab extends ConsumerStatefulWidget {
 class _ShelfTabState extends ConsumerState<_ShelfTab> {
   int _refreshSeed = 0;
 
+  Future<void> _confirmDeleteFavorite(AppDatabase db, LocalFavorite f) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        title: const Text('移除收藏', style: TextStyle(color: AppTheme.textPrimary, fontSize: 16)),
+        content: Text('确定从本地收藏中移除「${f.mediaId}」吗？',
+            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('移除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await db.deleteFavorite(MediaIdentity(
+      pluginId: f.pluginId,
+      mediaType: f.mediaType,
+      mediaId: f.mediaId,
+    ));
+    if (!mounted) return;
+    setState(() => _refreshSeed++);
+  }
+
+  Future<void> _confirmDeleteHistory(AppDatabase db, LocalTrackingData h) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        title: const Text('删除历史记录', style: TextStyle(color: AppTheme.textPrimary, fontSize: 16)),
+        content: Text('确定删除「${h.mediaId}」的观看/阅读进度吗？',
+            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await db.deleteTracking(MediaIdentity(
+      pluginId: h.pluginId,
+      mediaType: h.mediaType,
+      mediaId: h.mediaId,
+    ));
+    if (!mounted) return;
+    setState(() => _refreshSeed++);
+  }
+
+  Future<void> _confirmClearAllHistory(
+    AppDatabase db,
+    List<LocalTrackingData> history,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        title: const Text('清空历史记录', style: TextStyle(color: AppTheme.textPrimary, fontSize: 16)),
+        content: Text('确定清空全部 ${history.length} 条观看/阅读记录吗？',
+            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('清空'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    for (final h in history) {
+      await db.deleteTracking(MediaIdentity(
+        pluginId: h.pluginId,
+        mediaType: h.mediaType,
+        mediaId: h.mediaId,
+      ));
+    }
+    if (!mounted) return;
+    setState(() => _refreshSeed++);
+  }
+
   @override
   Widget build(BuildContext context) {
     final db = ref.watch(databaseProvider);
@@ -645,6 +742,9 @@ class _ShelfTabState extends ConsumerState<_ShelfTab> {
                   onAction: widget.onBrowseAnime,
                 )
               else ...[
+                const Text('提示：长按任意条目可删除收藏或记录',
+                    style: TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+                const SizedBox(height: 10),
                 if (favs.isNotEmpty) ...[
                   Text('本地收藏 (${favs.length})',
                       style: const TextStyle(
@@ -659,15 +759,27 @@ class _ShelfTabState extends ConsumerState<_ShelfTab> {
                       onTap: () => context.push(
                         '/detail/${Uri.encodeComponent(f.pluginId)}/${Uri.encodeComponent(f.mediaId)}',
                       ),
+                      onLongPress: () => _confirmDeleteFavorite(db, f),
                     ),
                   const SizedBox(height: 16),
                 ],
                 if (history.isNotEmpty) ...[
-                  Text('最近进度 (${history.length})',
-                      style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.textPrimary)),
+                  Row(
+                    children: [
+                      Text('最近进度 (${history.length})',
+                          style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.textPrimary)),
+                      const Spacer(),
+                      TextButton.icon(
+                        key: const Key('shelf-clear-history'),
+                        onPressed: () => _confirmClearAllHistory(db, history),
+                        icon: const Icon(LucideIcons.trash2, size: 14),
+                        label: const Text('清空历史', style: TextStyle(fontSize: 12)),
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 8),
                   for (final h in history.reversed)
                     _ShelfEntryTile(
@@ -677,6 +789,7 @@ class _ShelfTabState extends ConsumerState<_ShelfTab> {
                       onTap: () => context.push(
                         '/detail/${Uri.encodeComponent(h.pluginId)}/${Uri.encodeComponent(h.mediaId)}',
                       ),
+                      onLongPress: () => _confirmDeleteHistory(db, h),
                     ),
                 ],
               ],
@@ -693,11 +806,13 @@ class _ShelfEntryTile extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.onTap,
+    this.onLongPress,
   });
 
   final String title;
   final String subtitle;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -710,6 +825,7 @@ class _ShelfEntryTile extends StatelessWidget {
       ),
       child: ListTile(
         onTap: onTap,
+        onLongPress: onLongPress,
         leading: const SizedBox(
           width: 42,
           height: 56,
@@ -867,7 +983,7 @@ class _EmptyHubBanner extends StatelessWidget {
   }
 }
 
-const List<String> _novelTabs = ['电击文库', '轻小说榜'];
+const List<String> _novelTabs = ['哔哩轻小说', '电击文库', '轻小说榜'];
 
 class _NovelHubTab extends ConsumerStatefulWidget {
   const _NovelHubTab();
@@ -960,19 +1076,24 @@ class _NovelHubTabState extends ConsumerState<_NovelHubTab> {
       for (final s in activeSources)
         if (s.types.contains('novel')) s,
     ];
+    final isLinovelib = _activeTab == '哔哩轻小说';
     final hasBangumi = ref.watch(enabledSourceIdsProvider).contains('bangumi');
-    final exploreAsync = hasBangumi
+    final exploreAsync = isLinovelib
         ? ref.watch(sourceExploreItemsProvider(
-            (pluginId: 'bangumi', tab: _activeTab, mediaType: 'novel'),
+            (pluginId: LinovelibSource.pluginId, tab: '', mediaType: 'novel'),
           ))
-        : const AsyncValue<List<MediaItem>>.data([]);
+        : (hasBangumi
+            ? ref.watch(sourceExploreItemsProvider(
+                (pluginId: 'bangumi', tab: _activeTab, mediaType: 'novel'),
+              ))
+            : const AsyncValue<List<MediaItem>>.data([]));
 
     return CustomScrollView(
       slivers: [
         const SliverToBoxAdapter(
           child: _HubHeader(
             title: 'Titanhub · 轻小说',
-            hint: '搜索电击文库、轻小说或已导入书源…',
+            hint: '搜索轻小说、电击文库或已导入书源…',
             defaultType: MediaTypeFilter.novel,
           ),
         ),
@@ -982,26 +1103,28 @@ class _NovelHubTabState extends ConsumerState<_NovelHubTab> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    for (final tab in _novelTabs)
-                      Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: _darkChoiceChip(
-                          key: Key('novel-tab-$tab'),
-                          label: tab,
-                          selected: tab == _activeTab,
-                          onSelected: () => setState(() => _activeTab = tab),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      for (final tab in _novelTabs)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: _darkChoiceChip(
+                            key: Key('novel-tab-$tab'),
+                            label: tab,
+                            selected: tab == _activeTab,
+                            onSelected: () => setState(() => _activeTab = tab),
+                          ),
                         ),
+                      TextButton.icon(
+                        key: const Key('novel-import-legado'),
+                        onPressed: _showImportLegadoDialog,
+                        icon: const Icon(LucideIcons.plus, size: 14),
+                        label: const Text('导入书源', style: TextStyle(fontSize: 12)),
                       ),
-                    const Spacer(),
-                    TextButton.icon(
-                      key: const Key('novel-import-legado'),
-                      onPressed: _showImportLegadoDialog,
-                      icon: const Icon(LucideIcons.plus, size: 14),
-                      label: const Text('导入书源', style: TextStyle(fontSize: 12)),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
                 if (novelSources.where((s) => s.id != 'bangumi').isNotEmpty) ...[
                   const SizedBox(height: 6),
