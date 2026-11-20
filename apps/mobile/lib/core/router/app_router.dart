@@ -1,6 +1,8 @@
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../features/home/views/main_shell_screen.dart';
 import '../../features/search/views/search_screen.dart';
+import '../sources/local_sources.dart';
 import '../../features/media/views/detail_screen.dart';
 import '../../features/player/views/player_screen.dart';
 import '../../features/reader/views/manga_reader_screen.dart';
@@ -38,7 +40,28 @@ final routerProvider = Provider<GoRouter>((ref) {
     routes: [
       GoRoute(
         path: '/',
-        builder: (context, state) => const SearchScreen(),
+        builder: (context, state) => const MainShellScreen(),
+      ),
+      GoRoute(
+        path: '/search',
+        builder: (context, state) {
+          final qp = state.uri.queryParameters;
+          final typeName = qp['type'];
+          MediaTypeFilter? initialType;
+          if (typeName != null) {
+            for (final f in MediaTypeFilter.values) {
+              if (f.name == typeName) {
+                initialType = f;
+                break;
+              }
+            }
+          }
+          return SearchScreen(
+            initialType: initialType,
+            initialQuery: qp['q'],
+            initialSourceId: qp['source'],
+          );
+        },
       ),
       GoRoute(
         path: '/sources',

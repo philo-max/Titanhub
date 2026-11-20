@@ -25,7 +25,16 @@ const List<String> _hotTags = [
 ];
 
 class SearchScreen extends ConsumerStatefulWidget {
-  const SearchScreen({super.key});
+  const SearchScreen({
+    super.key,
+    this.initialType,
+    this.initialQuery,
+    this.initialSourceId,
+  });
+
+  final MediaTypeFilter? initialType;
+  final String? initialQuery;
+  final String? initialSourceId;
 
   @override
   ConsumerState<SearchScreen> createState() => _SearchScreenState();
@@ -36,6 +45,28 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   String _searchQuery = '';
   String? _resultSourceFilter;
   String? _selectedExploreTab;
+
+  @override
+  void initState() {
+    super.initState();
+    final q = widget.initialQuery?.trim() ?? '';
+    if (q.isNotEmpty) {
+      _searchController.text = q;
+      _searchQuery = q;
+    }
+    if (widget.initialType != null || widget.initialSourceId != null) {
+      Future.microtask(() {
+        if (!mounted) return;
+        if (widget.initialType != null) {
+          ref.read(selectedMediaTypeProvider.notifier).state = widget.initialType!;
+        }
+        if (widget.initialSourceId != null) {
+          ref.read(selectedSourceIdProvider.notifier).state =
+              widget.initialSourceId;
+        }
+      });
+    }
+  }
 
   void _performSearch() {
     setState(() {
