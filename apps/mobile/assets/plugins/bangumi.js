@@ -15,10 +15,28 @@ const plugin = {
   providesVideo: false,
 
   async search(query) {
+    const raw = (query || '').trim();
+    if (raw.startsWith('tag:')) {
+      const tag = raw.slice(4).trim();
+      if (!tag) return [];
+      const res = await fetch(API + '/v0/search/subjects?limit=20', {
+        method: 'POST',
+        headers: { ...HEADERS, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keyword: '', filter: { type: [2], tag: [tag] }, sort: 'heat' }),
+      });
+      const data = JSON.parse(await res.text());
+      const list = (data && data.data) || [];
+      return list.map((item) => ({
+        id: String(item.id),
+        title: item.name_cn || item.name || '未命名',
+        cover: pickCover(item.images),
+        description: item.summary || '',
+      }));
+    }
     const res = await fetch(
       API +
         '/search/subject/' +
-        encodeURIComponent(query) +
+        encodeURIComponent(raw) +
         '?type=2&responseGroup=small&max_results=20',
       { headers: HEADERS }
     );

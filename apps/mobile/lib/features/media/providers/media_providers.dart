@@ -80,8 +80,16 @@ final searchMediaProvider =
   final trimmed = request.query.trim();
   if (trimmed.isEmpty) return const SearchOutcome.empty();
 
+  final isTagQuery = trimmed.startsWith('tag:');
+  final plainKeyword = isTagQuery ? trimmed.substring(4).trim() : trimmed;
+  if (plainKeyword.isEmpty) return const SearchOutcome.empty();
+
   final filter = request.type;
-  final sources = ref.watch(searchSourcesProvider(filter));
+  var sources = ref.watch(searchSourcesProvider(filter));
+  if (isTagQuery && filter == MediaTypeFilter.anime) {
+    final bgmOnly = sources.where((s) => s.id == 'bangumi').toList();
+    if (bgmOnly.isNotEmpty) sources = bgmOnly;
+  }
   final remoteEnabled = ref.watch(remoteEnabledProvider);
   final runner = ref.watch(localPluginRunnerProvider);
   final items = <MediaItem>[];
@@ -97,8 +105,9 @@ final searchMediaProvider =
     for (final source in sources)
       () async {
         try {
+          final argQuery = (isTagQuery && source.id == 'bangumi') ? trimmed : plainKeyword;
           final List<dynamic> raw = await runner
-              .call(source.id, 'search', [trimmed])
+              .call(source.id, 'search', [argQuery])
               .timeout(_searchSourceTimeout);
           final found = <MediaItem>[];
           for (final entry in raw) {

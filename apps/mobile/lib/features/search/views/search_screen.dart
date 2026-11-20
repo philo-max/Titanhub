@@ -45,9 +45,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   }
 
   void _searchTag(String tag) {
-    _searchController.text = tag;
+    final selectedType = ref.read(selectedMediaTypeProvider);
+    final query = selectedType == MediaTypeFilter.anime && !tag.startsWith('tag:')
+        ? 'tag:$tag'
+        : tag;
+    _searchController.text = query;
     setState(() {
-      _searchQuery = tag;
+      _searchQuery = query;
       _resultSourceFilter = null;
     });
   }

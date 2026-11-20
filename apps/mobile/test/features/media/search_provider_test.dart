@@ -193,4 +193,28 @@ void main() {
     expect(outcome.failures.keys, contains('服务器'));
     expect(outcome.failures.values.first, contains('小说'));
   });
+
+  test('动漫标签搜索(tag:)优先路由到 Bangumi 并跳过仅支持标题搜索的动漫源', () async {
+    final runner = _RecordingRunner();
+    const tagSources = [
+      MediaSource(id: 'bangumi', name: 'Bangumi', types: ['anime'],
+          capabilities: {MediaCapability.search}),
+      MediaSource(id: 'kazumi-7sefun', name: '7sefun', types: ['anime'],
+          capabilities: {MediaCapability.search}),
+      MediaSource(id: 'manga-a', name: '漫画A', types: ['manga'],
+          capabilities: {MediaCapability.search}),
+    ];
+    final container = ProviderContainer(overrides: [
+      localSourcesProvider.overrideWithValue(tagSources),
+      enabledSourceIdsProvider.overrideWith((ref) => {for (final s in tagSources) s.id}),
+      localPluginRunnerProvider.overrideWithValue(runner),
+    ]);
+    addTearDown(container.dispose);
+
+    final outcome = await container
+        .read(searchMediaProvider((query: 'tag:校园', type: MediaTypeFilter.anime)).future);
+    expect(runner.calls, ['bangumi']);
+    expect(outcome.items.single.pluginId, 'bangumi');
+    expect(outcome.items.single.title, 'tag:校园@bangumi');
+  });
 }
