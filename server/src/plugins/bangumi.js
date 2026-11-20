@@ -9,7 +9,7 @@ function pickCover(images) {
   if (!raw) return '';
   const normalized = raw.startsWith('http://') ? 'https://' + raw.slice(7) : raw;
   if (normalized.indexOf('://lain.bgm.tv/') > 0 || normalized.indexOf('://api.bgm.tv/') > 0) {
-    return 'https://wsrv.nl/?url=' + encodeURIComponent(normalized.replace(/^https?:\/\//, ''));
+    return 'https://i0.wp.com/' + normalized.replace(/^https?:\/\//, '');
   }
   return normalized;
 }
