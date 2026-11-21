@@ -9,6 +9,7 @@ import '../../../core/sandbox/local_plugin_runner.dart';
 import '../../../core/sources/local_sources.dart';
 import '../../../core/sources/media_source.dart';
 import '../../../core/sources/novel/legado_book_source.dart';
+import '../../../core/sources/novel/legado_store.dart';
 import '../../../core/sources/novel/linovelib_source.dart';
 import '../../../core/storage/app_database.dart';
 import '../../../core/theme/app_theme.dart';
@@ -152,11 +153,13 @@ class _HubHeader extends StatelessWidget {
     required this.title,
     required this.hint,
     required this.defaultType,
+    this.trailingAction,
   });
 
   final String title;
   final String hint;
   final MediaTypeFilter defaultType;
+  final Widget? trailingAction;
 
   @override
   Widget build(BuildContext context) {
@@ -178,6 +181,7 @@ class _HubHeader extends StatelessWidget {
                   ),
                 ),
                 const Spacer(),
+                if (trailingAction != null) trailingAction!,
                 IconButton(
                   tooltip: 'WebDAV 云同步',
                   onPressed: () => context.push('/webdav'),
@@ -1036,30 +1040,25 @@ class _NovelHubTabState extends ConsumerState<_NovelHubTab> {
         return;
       }
       final runner = ref.read(localPluginRunnerProvider);
-      final added = <MediaSource>[];
-      final addedIds = <String>{};
-      for (var i = 0; i < parsed.length; i++) {
-        final s = parsed[i];
-        final id = 'legado-${s.name.hashCode}-$i';
+      final store = ref.read(legadoStoreProvider);
+      await store.upsertAll(parsed);
+      final addedById = <String, MediaSource>{};
+      for (final s in parsed) {
+        final id = s.stableId;
         runner.registerLegadoSource(id, s);
-        addedIds.add(id);
-        added.add(MediaSource(
-          id: id,
-          name: s.name,
-          types: const ['novel'],
-          capabilities: const {
-            MediaCapability.search,
-            MediaCapability.detail,
-            MediaCapability.chapters,
-            MediaCapability.content,
-          },
-        ));
+        addedById[id] = s.toMediaSource();
       }
-      ref.read(installedNovelSourcesProvider.notifier).update((list) => [...list, ...added]);
-      ref.read(enabledSourceIdsProvider.notifier).update((s) => {...s, ...addedIds});
+      ref.read(installedNovelSourcesProvider.notifier).update((list) {
+        final merged = <String, MediaSource>{
+          for (final item in list) item.id: item,
+          ...addedById,
+        };
+        return merged.values.toList();
+      });
+      ref.read(enabledSourceIdsProvider.notifier).update((s) => {...s, ...addedById.keys});
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('已导入 ${added.length} 个 Legado 小说源')),
+        SnackBar(content: Text('已导入并持久化 ${addedById.length} 个 Legado 小说源')),
       );
     } catch (e) {
       if (!mounted) return;
@@ -1069,32 +1068,74 @@ class _NovelHubTabState extends ConsumerState<_NovelHubTab> {
     }
   }
 
+  Future<void> _confirmRemoveLegado(MediaSource src) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        title: const Text('移除自定义书源？',
+            style: TextStyle(color: AppTheme.textPrimary, fontSize: 16)),
+        content: Text('确定删除「${src.name}」吗？',
+            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await ref.read(legadoStoreProvider).removeById(src.id);
+    ref.read(localPluginRunnerProvider).unregisterLegadoSource(src.id);
+    ref.read(installedNovelSourcesProvider.notifier).update(
+          (list) => list.where((item) => item.id != src.id).toList(),
+        );
+    ref.read(enabledSourceIdsProvider.notifier).update(
+          (set) => {...set}..remove(src.id),
+        );
+  }
+
   @override
   Widget build(BuildContext context) {
     final activeSources = ref.watch(activeSourcesProvider);
-    final novelSources = [
+    final customNovelSources = [
       for (final s in activeSources)
-        if (s.types.contains('novel')) s,
+        if (s.types.contains('novel') &&
+            s.id != 'bangumi' &&
+            s.id != LinovelibSource.pluginId)
+          s,
     ];
     final isLinovelib = _activeTab == '哔哩轻小说';
     final hasBangumi = ref.watch(enabledSourceIdsProvider).contains('bangumi');
-    final exploreAsync = isLinovelib
-        ? ref.watch(sourceExploreItemsProvider(
-            (pluginId: LinovelibSource.pluginId, tab: '', mediaType: 'novel'),
-          ))
-        : (hasBangumi
-            ? ref.watch(sourceExploreItemsProvider(
-                (pluginId: 'bangumi', tab: _activeTab, mediaType: 'novel'),
-              ))
-            : const AsyncValue<List<MediaItem>>.data([]));
+    final exploreKey = isLinovelib
+        ? (pluginId: LinovelibSource.pluginId, tab: '', mediaType: 'novel')
+        : (pluginId: 'bangumi', tab: _activeTab, mediaType: 'novel');
+    final exploreAsync = (isLinovelib || hasBangumi)
+        ? ref.watch(sourceExploreItemsProvider(exploreKey))
+        : const AsyncValue<List<MediaItem>>.data([]);
 
     return CustomScrollView(
       slivers: [
-        const SliverToBoxAdapter(
+        SliverToBoxAdapter(
           child: _HubHeader(
             title: 'Titanhub · 轻小说',
             hint: '搜索轻小说、电击文库或已导入书源…',
             defaultType: MediaTypeFilter.novel,
+            trailingAction: TextButton.icon(
+              key: const Key('novel-import-legado'),
+              onPressed: _showImportLegadoDialog,
+              style: TextButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              ),
+              icon: const Icon(LucideIcons.plus, size: 14),
+              label: const Text('导入书源', style: TextStyle(fontSize: 12)),
+            ),
           ),
         ),
         SliverToBoxAdapter(
@@ -1117,27 +1158,26 @@ class _NovelHubTabState extends ConsumerState<_NovelHubTab> {
                             onSelected: () => setState(() => _activeTab = tab),
                           ),
                         ),
-                      TextButton.icon(
-                        key: const Key('novel-import-legado'),
-                        onPressed: _showImportLegadoDialog,
-                        icon: const Icon(LucideIcons.plus, size: 14),
-                        label: const Text('导入书源', style: TextStyle(fontSize: 12)),
-                      ),
                     ],
                   ),
                 ),
-                if (novelSources.where((s) => s.id != 'bangumi').isNotEmpty) ...[
-                  const SizedBox(height: 6),
+                if (customNovelSources.isNotEmpty) ...[
+                  const SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
+                    runSpacing: 6,
                     children: [
-                      for (final src in novelSources.where((s) => s.id != 'bangumi'))
-                        ActionChip(
-                          label: Text(src.name, style: const TextStyle(fontSize: 11)),
-                          onPressed: () => context.push(_searchRoute(
-                            type: MediaTypeFilter.novel,
-                            sourceId: src.id,
-                          )),
+                      for (final src in customNovelSources)
+                        GestureDetector(
+                          onLongPress: () => _confirmRemoveLegado(src),
+                          child: ActionChip(
+                            avatar: const Icon(LucideIcons.bookMarked, size: 13),
+                            label: Text(src.name, style: const TextStyle(fontSize: 11)),
+                            onPressed: () => context.push(_searchRoute(
+                              type: MediaTypeFilter.novel,
+                              sourceId: src.id,
+                            )),
+                          ),
                         ),
                     ],
                   ),
@@ -1157,9 +1197,8 @@ class _NovelHubTabState extends ConsumerState<_NovelHubTab> {
           error: (err, _) => SliverToBoxAdapter(
             child: _EmptyHubBanner(
               message: '小说榜单加载失败：$err',
-              actionLabel: '前往搜索小说',
-              onAction: () =>
-                  context.push(_searchRoute(type: MediaTypeFilter.novel)),
+              actionLabel: '重试加载',
+              onAction: () => ref.invalidate(sourceExploreItemsProvider(exploreKey)),
             ),
           ),
           data: (items) {

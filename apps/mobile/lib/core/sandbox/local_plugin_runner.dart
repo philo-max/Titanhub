@@ -29,6 +29,10 @@ class LocalPluginRunner {
     _legadoSources[id] = LegadoRuleRunner(source: source);
   }
 
+  void unregisterLegadoSource(String id) {
+    _legadoSources.remove(id);
+  }
+
   void registerVeneraSource(
     InstalledVeneraSource meta,
     String code,
@@ -162,12 +166,7 @@ class LocalPluginRunner {
         case 'search':
           return legado.search('${args.first}');
         case 'getDetail':
-          return {
-            'id': '${args.first}',
-            'title': '${args.first}',
-            'cover': '',
-            'description': '来自 Legado 书源：${legado.source.name}',
-          };
+          return legado.getDetail('${args.first}');
         case 'getChapters':
           return legado.getChapters('${args.first}');
         case 'getContent':

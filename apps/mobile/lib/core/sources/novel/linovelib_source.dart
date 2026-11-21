@@ -22,7 +22,12 @@ class LinovelibSource {
   static const String sourceName = '哔哩轻小说';
   static const String baseUrl = 'https://www.linovelib.com';
 
+  static const int maxChapterPages = 30;
+  static const Duration _exploreCacheTtl = Duration(minutes: 5);
+
   final Dio _dio;
+  List<Map<String, dynamic>>? _exploreCache;
+  DateTime? _exploreCachedAt;
 
   Future<dynamic> call(String method, List<dynamic> args) async {
     switch (method) {
@@ -74,11 +79,15 @@ class LinovelibSource {
       if (title.isEmpty) continue;
 
       String cover = '';
-      if (i < imgBlocks.length) {
-        final img = imgBlocks[i].querySelector('img');
-        if (img != null) {
-          cover = _resolveUrl(img.attributes['data-original'] ?? img.attributes['src'] ?? '');
-        }
+      // Prefer structurally coupled sibling/parent cover container over blind index matching
+      final prev = info.previousElementSibling;
+      final imgEl = (prev != null && prev.classes.contains('se-result-book')
+              ? prev.querySelector('img')
+              : null) ??
+          info.querySelector('img') ??
+          (imgBlocks.length == infoBlocks.length ? imgBlocks[i].querySelector('img') : null);
+      if (imgEl != null) {
+        cover = _resolveUrl(imgEl.attributes['data-original'] ?? imgEl.attributes['src'] ?? '');
       }
       if (cover.contains('book-cover-no')) cover = '';
 
@@ -110,15 +119,37 @@ class LinovelibSource {
     return out;
   }
 
-  Future<List<Map<String, dynamic>>> explore() async {
+  Future<List<Map<String, dynamic>>> explore({bool forceRefresh = false}) async {
+    final cached = _exploreCache;
+    final cachedAt = _exploreCachedAt;
+    if (!forceRefresh &&
+        cached != null &&
+        cachedAt != null &&
+        DateTime.now().difference(cachedAt) < _exploreCacheTtl) {
+      return cached;
+    }
     final res = await _dio.get<String>('/S6/');
-    return parseListHtml(res.data ?? '');
+    final items = parseListHtml(res.data ?? '');
+    if (items.isNotEmpty) {
+      _exploreCache = items;
+      _exploreCachedAt = DateTime.now();
+    }
+    return items;
+  }
+
+  static bool _looksBlockedHtml(String html) {
+    final lower = html.toLowerCase();
+    return lower.contains('cf-browser-verification') ||
+        lower.contains('just a moment') ||
+        html.contains('安全验证') ||
+        html.contains('访问过于频繁');
   }
 
   Future<List<Map<String, dynamic>>> search(String rawQuery) async {
     final q = rawQuery.replaceFirst(RegExp(r'^tag:'), '').trim();
     if (q.isEmpty) return explore();
 
+    // 1. Try POST /S6/ (desktop/mobile form endpoint)
     try {
       final res = await _dio.post<String>(
         '/S6/',
@@ -128,12 +159,30 @@ class LinovelibSource {
           headers: const {'Referer': 'https://www.linovelib.com/S6/'},
         ),
       );
-      final parsed = parseListHtml(res.data ?? '');
-      if (parsed.isNotEmpty) return parsed;
-    } catch (_) {
-      // Fall back to filtering live /S6/ catalog below.
-    }
+      final body = res.data ?? '';
+      if (!_looksBlockedHtml(body)) {
+        final parsed = parseListHtml(body);
+        if (parsed.isNotEmpty) return parsed;
+      }
+    } catch (_) {}
 
+    // 2. Try GET /S6/?searchkey=...
+    try {
+      final res = await _dio.get<String>(
+        '/S6/',
+        queryParameters: {'searchkey': q},
+        options: Options(
+          headers: const {'Referer': 'https://www.linovelib.com/S6/'},
+        ),
+      );
+      final body = res.data ?? '';
+      if (!_looksBlockedHtml(body)) {
+        final parsed = parseListHtml(body);
+        if (parsed.isNotEmpty) return parsed;
+      }
+    } catch (_) {}
+
+    // 3. Fall back to filtering cached /S6/ catalog
     final catalog = await explore();
     final lower = q.toLowerCase();
     return [
@@ -141,6 +190,26 @@ class LinovelibSource {
         if ('${item['title']} ${item['description']}'.toLowerCase().contains(lower))
           item,
     ];
+  }
+
+  static bool _isUiGenreNoise(String raw) {
+    final t = raw.trim();
+    if (t.isEmpty || t.length > 14) return true;
+    if (t.contains('|') || t.contains('｜')) return true;
+    const blocked = {
+      '正序',
+      '倒序',
+      '更多',
+      '展开',
+      '收起',
+      '连载',
+      '完结',
+      '已完结',
+      '连载中',
+      '全部',
+      '目录',
+    };
+    return blocked.contains(t);
   }
 
   Future<Map<String, dynamic>> getDetail(String mediaId) async {
@@ -161,10 +230,16 @@ class LinovelibSource {
         '';
     final author = doc.querySelector('.au-name a')?.text.trim() ??
         doc.querySelector('meta[property="og:novel:author"]')?.attributes['content']?.trim();
-    final genres = <String>[
-      for (final el in doc.querySelectorAll('.book-label a, .book-label span'))
-        if (el.text.trim().isNotEmpty) el.text.trim(),
-    ];
+
+    final seenGenres = <String>{};
+    final genres = <String>[];
+    for (final el in doc.querySelectorAll('.book-label a, .book-label span')) {
+      final raw = el.text.replaceAll(RegExp(r'\s+'), '').trim();
+      if (_isUiGenreNoise(raw)) continue;
+      if (seenGenres.add(raw)) {
+        genres.add(raw);
+      }
+    }
 
     return {
       'id': id,
@@ -172,7 +247,7 @@ class LinovelibSource {
       'cover': _resolveUrl(coverRaw),
       'description': description,
       if (author != null && author.isNotEmpty) 'author': author,
-      'genres': genres.toSet().toList(),
+      'genres': genres,
     };
   }
 
@@ -214,8 +289,24 @@ class LinovelibSource {
     final container = doc.querySelector('#TextContent') ?? doc.querySelector('.TextContent');
     if (container == null) return const [];
     final paragraphs = <String>[];
-    for (final p in container.querySelectorAll('p')) {
-      final t = p.text
+
+    // Extract inline illustration markers and text paragraphs in document order
+    for (final el in container.querySelectorAll('p, img')) {
+      if (el.localName == 'img') {
+        final src = (el.attributes['data-src'] ??
+                el.attributes['data-original'] ??
+                el.attributes['src'] ??
+                '')
+            .trim();
+        final resolved = _resolveUrl(src);
+        if (resolved.isNotEmpty &&
+            !resolved.contains('book-cover-no') &&
+            !resolved.endsWith('.svg')) {
+          paragraphs.add('[IMG:$resolved]');
+        }
+        continue;
+      }
+      final t = el.text
           .replaceAll(RegExp(r'（?(?:內容加載失敗|内容加载失败)[^）\n]*）?'), '')
           .trim();
       if (t.isNotEmpty && !_isNoiseParagraph(t)) {
@@ -247,7 +338,7 @@ class LinovelibSource {
     final visited = <String>{};
     String? nextPath = initialPath;
 
-    for (var page = 0; page < 10 && nextPath != null; page++) {
+    for (var page = 0; page < maxChapterPages && nextPath != null; page++) {
       if (!visited.add(nextPath)) break;
       final res = await _dio.get<String>(nextPath);
       final html = res.data ?? '';

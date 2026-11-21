@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../sandbox/local_plugin_runner.dart';
 import 'media_source.dart';
+import 'novel/legado_store.dart';
 import 'novel/linovelib_source.dart';
 import 'seven_se_fun_source.dart';
 
@@ -86,17 +88,26 @@ const MediaSource linovelibMediaSource = MediaSource(
 );
 
 final novelBootstrapProvider = FutureProvider<void>((ref) async {
+  final store = ref.read(legadoStoreProvider);
+  final savedLegado = await store.loadAll();
+  final runner = ref.read(localPluginRunnerProvider);
+  final savedSources = <MediaSource>[];
+  for (final src in savedLegado) {
+    runner.registerLegadoSource(src.stableId, src);
+    savedSources.add(src.toMediaSource());
+  }
+
   Future<void>.microtask(() {
     final current = ref.read(installedNovelSourcesProvider);
-    if (!current.any((s) => s.id == linovelibMediaSource.id)) {
-      ref.read(installedNovelSourcesProvider.notifier).state = [
-        linovelibMediaSource,
-        ...current,
-      ];
-    }
-    ref
-        .read(enabledSourceIdsProvider.notifier)
-        .update((s) => {...s, linovelibMediaSource.id});
+    final mergedById = <String, MediaSource>{
+      linovelibMediaSource.id: linovelibMediaSource,
+      for (final s in current) s.id: s,
+      for (final s in savedSources) s.id: s,
+    };
+    ref.read(installedNovelSourcesProvider.notifier).state = mergedById.values.toList();
+    ref.read(enabledSourceIdsProvider.notifier).update(
+          (s) => {...s, ...mergedById.keys},
+        );
   });
 });
 

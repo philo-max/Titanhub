@@ -14,7 +14,7 @@ Future<void> main() async {
   // Ensure Flutter engine and native bindings are fully initialized before startup
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Start local DoH CONNECT proxy to bypass Mainland ISP DNS poisoning (e.g. api.bgm.tv / lain.bgm.tv)
+  // Start local DoH CONNECT proxy for Mainland China networks
   await MainlandDohProxy.instance.start();
   HttpOverrides.global = MainlandHttpOverrides();
 

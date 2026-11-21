@@ -4,6 +4,8 @@ import 'package:dio/dio.dart';
 import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;
 
+import '../media_source.dart';
+
 class LegadoSearchRule {
   const LegadoSearchRule({
     required this.bookList,
@@ -24,6 +26,15 @@ class LegadoSearchRule {
       intro: '${json['intro'] ?? ''}',
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'bookList': bookList,
+        'name': name,
+        'bookUrl': bookUrl,
+        'author': author,
+        'coverUrl': coverUrl,
+        'intro': intro,
+      };
 
   final String bookList;
   final String name;
@@ -47,6 +58,12 @@ class LegadoTocRule {
       chapterUrl: '${json['chapterUrl'] ?? ''}',
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'chapterList': chapterList,
+        'chapterName': chapterName,
+        'chapterUrl': chapterUrl,
+      };
 
   final String chapterList;
   final String chapterName;
@@ -114,6 +131,47 @@ class LegadoBookSource {
   final String coverRule;
   final Map<String, String> headers;
 
+  /// Deterministic FNV-1a ID across app restarts so bookmarks and deduplication
+  /// never collide or drift when Dart's per-process `hashCode` changes.
+  String get stableId {
+    final key = '${baseUrl.trim().toLowerCase()}|${name.trim().toLowerCase()}';
+    var hash = 0x811c9dc5;
+    for (final unit in utf8.encode(key)) {
+      hash ^= unit;
+      hash = (hash * 0x01000193) & 0xffffffff;
+    }
+    return 'legado-${hash.toRadixString(16).padLeft(8, '0')}';
+  }
+
+  MediaSource toMediaSource() => MediaSource(
+        id: stableId,
+        name: name,
+        types: const ['novel'],
+        capabilities: const {
+          MediaCapability.search,
+          MediaCapability.detail,
+          MediaCapability.chapters,
+          MediaCapability.content,
+        },
+      );
+
+  Map<String, dynamic> toJson() => {
+        'bookSourceName': name,
+        'bookSourceUrl': baseUrl,
+        'searchUrl': searchUrl,
+        'header': headers,
+        'ruleSearch': ruleSearch.toJson(),
+        'ruleBookInfo': {
+          'tocUrl': tocUrlRule,
+          'intro': introRule,
+          'coverUrl': coverRule,
+        },
+        'ruleToc': ruleToc.toJson(),
+        'ruleContent': {
+          'content': contentRule,
+        },
+      };
+
   static List<LegadoBookSource> parseList(String rawJson) {
     final decoded = jsonDecode(rawJson);
     if (decoded is List) {
@@ -136,18 +194,21 @@ class LegadoRuleRunner {
   final LegadoBookSource source;
   final Dio _dio;
 
-  String _resolveUrl(String maybeRelative) {
+  String _resolveUrl(String maybeRelative, {String? baseUrl}) {
     final trimmed = maybeRelative.trim();
     if (trimmed.isEmpty) return '';
     final parsed = Uri.tryParse(trimmed);
     if (parsed != null && parsed.hasScheme) return trimmed;
-    final base = Uri.tryParse(source.baseUrl);
+    final candidateBase = (baseUrl != null && baseUrl.trim().isNotEmpty)
+        ? baseUrl.trim()
+        : source.baseUrl;
+    final base = Uri.tryParse(candidateBase);
     if (base == null) return trimmed;
     return base.resolve(trimmed).toString();
   }
 
-  Future<String> _fetch(String url) async {
-    final full = _resolveUrl(url);
+  Future<({String url, String body})> _fetchWithUrl(String url, {String? baseUrl}) async {
+    final full = _resolveUrl(url, baseUrl: baseUrl);
     final res = await _dio.get<String>(
       full,
       options: Options(
@@ -159,7 +220,8 @@ class LegadoRuleRunner {
         responseType: ResponseType.plain,
       ),
     );
-    return res.data ?? '';
+    final finalUrl = res.realUri.toString().isNotEmpty ? res.realUri.toString() : full;
+    return (url: finalUrl, body: res.data ?? '');
   }
 
   static List<dom.Element> selectElements(dom.Element root, String rawRule) {
@@ -211,31 +273,67 @@ class LegadoRuleRunner {
     final url = source.searchUrl
         .replaceAll('{{key}}', Uri.encodeComponent(keyword))
         .replaceAll('{{page}}', '1');
-    final htmlStr = await _fetch(url);
-    final doc = html_parser.parse(htmlStr);
+    final fetched = await _fetchWithUrl(url);
+    final doc = html_parser.parse(fetched.body);
     final root = doc.documentElement;
     if (root == null) return const [];
     final items = selectElements(root, source.ruleSearch.bookList);
     return [
       for (final el in items)
         {
-          'id': _resolveUrl(extractValue(el, source.ruleSearch.bookUrl)),
+          'id': _resolveUrl(extractValue(el, source.ruleSearch.bookUrl), baseUrl: fetched.url),
           'title': extractValue(el, source.ruleSearch.name),
-          'cover': _resolveUrl(extractValue(el, source.ruleSearch.coverUrl)),
+          'cover': _resolveUrl(extractValue(el, source.ruleSearch.coverUrl), baseUrl: fetched.url),
           'description': extractValue(el, source.ruleSearch.intro),
         },
     ].where((m) => '${m['id']}'.isNotEmpty && '${m['title']}'.isNotEmpty).toList();
   }
 
+  Future<Map<String, dynamic>> getDetail(String bookUrl) async {
+    final resolvedBookUrl = _resolveUrl(bookUrl);
+    try {
+      final fetched = await _fetchWithUrl(resolvedBookUrl);
+      final doc = html_parser.parse(fetched.body);
+      final root = doc.documentElement;
+      final title = root?.querySelector('meta[property="og:title"]')?.attributes['content']?.trim() ??
+          root?.querySelector('h1')?.text.trim() ??
+          root?.querySelector('title')?.text.trim() ??
+          resolvedBookUrl;
+      final cover = (root != null && source.coverRule.trim().isNotEmpty)
+          ? _resolveUrl(extractValue(root, source.coverRule), baseUrl: fetched.url)
+          : _resolveUrl(
+              root?.querySelector('meta[property="og:image"]')?.attributes['content'] ?? '',
+              baseUrl: fetched.url,
+            );
+      final intro = (root != null && source.introRule.trim().isNotEmpty)
+          ? extractValue(root, source.introRule)
+          : (root?.querySelector('meta[property="og:description"]')?.attributes['content']?.trim() ??
+              '来自 Legado 书源：${source.name}');
+      return {
+        'id': resolvedBookUrl,
+        'title': title.isNotEmpty ? title : resolvedBookUrl,
+        'cover': cover,
+        'description': intro.isNotEmpty ? intro : '来自 Legado 书源：${source.name}',
+      };
+    } catch (_) {
+      return {
+        'id': resolvedBookUrl,
+        'title': resolvedBookUrl,
+        'cover': '',
+        'description': '来自 Legado 书源：${source.name}',
+      };
+    }
+  }
+
   Future<List<Map<String, dynamic>>> getChapters(String bookUrl) async {
-    var htmlStr = await _fetch(bookUrl);
-    var doc = html_parser.parse(htmlStr);
+    var fetched = await _fetchWithUrl(bookUrl);
+    var doc = html_parser.parse(fetched.body);
     var root = doc.documentElement;
     if (root != null && source.tocUrlRule.trim().isNotEmpty) {
       final tocUrl = extractValue(root, source.tocUrlRule);
       if (tocUrl.isNotEmpty) {
-        htmlStr = await _fetch(tocUrl);
-        doc = html_parser.parse(htmlStr);
+        fetched = await _fetchWithUrl(tocUrl, baseUrl: fetched.url);
+        doc = html_parser.parse(fetched.body);
         root = doc.documentElement;
       }
     }
@@ -244,21 +342,24 @@ class LegadoRuleRunner {
     final chapters = <Map<String, dynamic>>[];
     for (var i = 0; i < list.length; i++) {
       final el = list[i];
-      final chUrl = _resolveUrl(extractValue(el, source.ruleToc.chapterUrl));
+      final chUrl = _resolveUrl(
+        extractValue(el, source.ruleToc.chapterUrl),
+        baseUrl: fetched.url,
+      );
       final chTitle = extractValue(el, source.ruleToc.chapterName);
       if (chUrl.isEmpty) continue;
       chapters.add({
         'id': chUrl,
         'title': chTitle.isEmpty ? '第 ${i + 1} 章' : chTitle,
-        'chapterNo': i + 1,
+        'chapterNo': chapters.length + 1,
       });
     }
     return chapters;
   }
 
   Future<String> getContent(String chapterUrl) async {
-    final htmlStr = await _fetch(chapterUrl);
-    final doc = html_parser.parse(htmlStr);
+    final fetched = await _fetchWithUrl(chapterUrl);
+    final doc = html_parser.parse(fetched.body);
     final root = doc.documentElement;
     if (root == null) return '';
     final raw = extractValue(root, source.contentRule);

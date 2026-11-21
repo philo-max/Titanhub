@@ -497,9 +497,13 @@ class DetailScreen extends ConsumerWidget {
                                           ),
                                         ),
                                       ),
-                                      const Icon(
-                                        LucideIcons.play,
-                                        size: 12,
+                                      Icon(
+                                        (source?.supports(MediaCapability.content) ?? false)
+                                            ? LucideIcons.bookOpen
+                                            : ((source?.supports(MediaCapability.images) ?? false)
+                                                ? LucideIcons.bookImage
+                                                : LucideIcons.play),
+                                        size: 13,
                                         color: AppTheme.primary,
                                       ),
                                     ],

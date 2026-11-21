@@ -83,4 +83,69 @@ void main() {
     final text = await src.getContent('2906/242200');
     expect(text, '「欢迎来到学园都市。」\n\n第一页末尾\n\n第二页继续展开。');
   });
+
+  test('LinovelibSource filters junk/duplicate genres and parses illustration chapters', () async {
+    final dio = Dio(BaseOptions(baseUrl: LinovelibSource.baseUrl, responseType: ResponseType.plain));
+    dio.interceptors.add(InterceptorsWrapper(onRequest: (options, handler) {
+      final path = options.uri.path;
+      if (path == '/novel/3001.html') {
+        handler.resolve(Response(
+          requestOptions: options,
+          statusCode: 200,
+          data: '''
+            <h1 class="book-name">青春猪头少年</h1>
+            <div class="book-label">
+              <a href="#">青春</a>
+              <span>青春</span>
+              <span>恋爱</span>
+              <span>倒序|正序</span>
+              <span>|</span>
+              <span>连载中</span>
+            </div>
+          ''',
+        ));
+        return;
+      }
+      if (path == '/novel/3001/999.html') {
+        handler.resolve(Response(
+          requestOptions: options,
+          statusCode: 200,
+          data: '''
+            <div id="TextContent">
+              <img class="imagecontent" data-src="https://img3.readpai.com/3/3001/01.jpg" />
+            </div>
+          ''',
+        ));
+        return;
+      }
+      handler.reject(DioException(requestOptions: options));
+    }));
+
+    final src = LinovelibSource(dio: dio);
+    final detail = await src.getDetail('3001');
+    expect(detail['genres'], ['青春', '恋爱']);
+
+    final illusContent = await src.getContent('3001/999');
+    expect(illusContent, '[IMG:https://img3.readpai.com/3/3001/01.jpg]');
+  });
+
+  test('LinovelibSource.parseListHtml couples cover by sibling container instead of blind index', () {
+    const html = '''
+      <div class="se-result-infos">
+        <h2 class="tit"><a href="/novel/100.html">无图作品</a></h2>
+      </div>
+      <div class="se-result-book">
+        <img data-original="https://www.linovelib.com/files/article/image/2/200/200s.jpg">
+      </div>
+      <div class="se-result-infos">
+        <h2 class="tit"><a href="/novel/200.html">有图作品</a></h2>
+      </div>
+    ''';
+    final items = LinovelibSource.parseListHtml(html);
+    expect(items.length, 2);
+    expect(items[0]['id'], '100');
+    expect(items[0]['cover'], '');
+    expect(items[1]['id'], '200');
+    expect(items[1]['cover'], 'https://www.linovelib.com/files/article/image/2/200/200s.jpg');
+  });
 }
