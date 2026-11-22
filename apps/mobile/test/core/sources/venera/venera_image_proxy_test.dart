@@ -37,6 +37,56 @@ void main() {
     expect(out.getPixel(0, 3).b, 0);
   });
 
+  test('VeneraImageRegistry fillImageRangeAt preserves exact slice height without stretching', () {
+    // 4 horizontal bands of height 2 each (total 4x8): red, green, blue, yellow.
+    final src = img.Image(width: 4, height: 8, numChannels: 4);
+    final colors = [
+      (255, 0, 0),
+      (0, 255, 0),
+      (0, 0, 255),
+      (255, 255, 0),
+    ];
+    for (var b = 0; b < 4; b++) {
+      final (r, g, bl) = colors[b];
+      for (var y = b * 2; y < b * 2 + 2; y++) {
+        for (var x = 0; x < 4; x++) {
+          src.setPixelRgba(x, y, r, g, bl, 255);
+        }
+      }
+    }
+
+    final reg = VeneraImageRegistry(src);
+    final outKey = reg.dispatch({'function': 'empty', 'width': 4, 'height': 8}) as int;
+    // Reverse bands exactly like JM modifyImage does via fillImageRangeAt.
+    var dstY = 0;
+    for (var b = 3; b >= 0; b--) {
+      reg.dispatch({
+        'function': 'fillImageRangeAt',
+        'key': outKey,
+        'x': 0,
+        'y': dstY,
+        'image': 1,
+        'srcX': 0,
+        'srcY': b * 2,
+        'width': 4,
+        'height': 2,
+      });
+      dstY += 2;
+    }
+
+    final out = reg.get(outKey)!;
+    // Band 0 in output should be yellow (originally band 3)
+    expect((out.getPixel(1, 0).r, out.getPixel(1, 0).g, out.getPixel(1, 0).b), (255, 255, 0));
+    expect((out.getPixel(1, 1).r, out.getPixel(1, 1).g, out.getPixel(1, 1).b), (255, 255, 0));
+    // Band 1 in output should be blue (originally band 2)
+    expect((out.getPixel(1, 2).r, out.getPixel(1, 2).g, out.getPixel(1, 2).b), (0, 0, 255));
+    // Band 2 in output should be green (originally band 1)
+    expect((out.getPixel(1, 4).r, out.getPixel(1, 4).g, out.getPixel(1, 4).b), (0, 255, 0));
+    // Band 3 in output should be red (originally band 0)
+    expect((out.getPixel(1, 6).r, out.getPixel(1, 6).g, out.getPixel(1, 6).b), (255, 0, 0));
+    expect((out.getPixel(1, 7).r, out.getPixel(1, 7).g, out.getPixel(1, 7).b), (255, 0, 0));
+  });
+
   test('VeneraImageProxy serves modified image bytes and caches subsequent requests', () async {
     final upstream = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() => upstream.close(force: true));

@@ -132,6 +132,66 @@ class MainlandDohProxy {
     _server = null;
   }
 
+  static bool _isFakeOrPrivateIpv4(InternetAddress addr) {
+    if (addr.type != InternetAddressType.IPv4) return false;
+    final b = addr.rawAddress;
+    if (b.length != 4) return false;
+    // 198.18.0.0/15 — RFC 2544 benchmark range used by Clash/sing-box/v2ray TUN Fake-IP
+    if (b[0] == 198 && (b[1] == 18 || b[1] == 19)) return true;
+    // 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 127.0.0.0/8
+    if (b[0] == 10 || b[0] == 127) return true;
+    if (b[0] == 172 && b[1] >= 16 && b[1] <= 31) return true;
+    if (b[0] == 192 && b[1] == 168) return true;
+    return false;
+  }
+
+  Future<Socket> _connectUpstream(String host, int port) async {
+    // 1. Check system DNS first. Under VPN/TUN (Fake-IP or Redir-Host), system
+    //    DNS returns a tunnel-routable address (e.g. 198.18.x.x) that MUST NOT
+    //    be bypassed via Mainland DoH.
+    List<InternetAddress> sysAddrs = const [];
+    try {
+      sysAddrs = await InternetAddress.lookup(host)
+          .timeout(const Duration(seconds: 3));
+    } catch (_) {}
+
+    if (sysAddrs.any(_isFakeOrPrivateIpv4)) {
+      return Socket.connect(
+        sysAddrs.firstWhere(_isFakeOrPrivateIpv4),
+        port,
+        timeout: const Duration(seconds: 10),
+      );
+    }
+
+    if (sysAddrs.isNotEmpty) {
+      try {
+        return await Socket.connect(
+          sysAddrs.first,
+          port,
+          timeout: const Duration(seconds: 5),
+        );
+      } catch (_) {
+        // Fall through to Mainland DoH in case system DNS was poisoned.
+      }
+    }
+
+    // 2. Fallback to Mainland DoH (AliDNS / DNSPod) to bypass ISP DNS poisoning.
+    final resolvedIp = await _resolver.resolveA(host);
+    if (resolvedIp != null && resolvedIp.isNotEmpty) {
+      return Socket.connect(
+        resolvedIp,
+        port,
+        timeout: const Duration(seconds: 10),
+      );
+    }
+
+    return Socket.connect(
+      host,
+      port,
+      timeout: const Duration(seconds: 10),
+    );
+  }
+
   void _handleClient(Socket client) {
     final buf = <int>[];
     Socket? upstream;
@@ -170,12 +230,7 @@ class MainlandDohProxy {
             final port = colon > 0
                 ? (int.tryParse(targetArg.substring(colon + 1)) ?? 443)
                 : 443;
-            final resolvedIp = await _resolver.resolveA(host);
-            upstream = await Socket.connect(
-              resolvedIp ?? host,
-              port,
-              timeout: const Duration(seconds: 10),
-            );
+            upstream = await _connectUpstream(host, port);
             client.write('HTTP/1.1 200 Connection Established\r\n\r\n');
             if (leftover.isNotEmpty) upstream!.add(leftover);
           } else {
@@ -187,12 +242,7 @@ class MainlandDohProxy {
             }
             final host = uri.host;
             final port = uri.hasPort ? uri.port : (uri.scheme == 'https' ? 443 : 80);
-            final resolvedIp = await _resolver.resolveA(host);
-            upstream = await Socket.connect(
-              resolvedIp ?? host,
-              port,
-              timeout: const Duration(seconds: 10),
-            );
+            upstream = await _connectUpstream(host, port);
             final relPath = uri.path.isEmpty ? '/' : uri.path;
             final fullPath = uri.hasQuery ? '$relPath?${uri.query}' : relPath;
             final rebuiltHead =
@@ -221,7 +271,8 @@ class MainlandDohProxy {
 }
 
 /// Global [HttpOverrides] routing domain requests through [MainlandDohProxy]
-/// when Mainland DoH mode is enabled, while keeping localhost / IP literals direct.
+/// when Mainland DoH mode is enabled, while respecting system proxies and
+/// keeping localhost / IP literals direct.
 class MainlandHttpOverrides extends HttpOverrides {
   MainlandHttpOverrides({MainlandDohProxy? proxy})
       : _proxy = proxy ?? MainlandDohProxy.instance;
@@ -234,6 +285,9 @@ class MainlandHttpOverrides extends HttpOverrides {
   HttpClient createHttpClient(SecurityContext? context) {
     final client = super.createHttpClient(context);
     client.findProxy = (Uri uri) {
+      // Respect explicit system HTTP proxy (e.g. Clash/v2ray/Wi-Fi proxy).
+      final envProxy = HttpClient.findProxyFromEnvironment(uri);
+      if (envProxy != 'DIRECT') return envProxy;
       final port = _proxy.port;
       if (!enabled || port == null) return 'DIRECT';
       final host = uri.host;

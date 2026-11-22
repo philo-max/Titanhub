@@ -857,13 +857,14 @@ class _ShelfEntryTile extends StatelessWidget {
   }
 }
 
-class _MediaPosterGrid extends StatelessWidget {
+class _MediaPosterGrid extends ConsumerWidget {
   const _MediaPosterGrid({required this.items});
 
   final List<MediaItem> items;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final runner = ref.read(localPluginRunnerProvider);
     return SliverPadding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       sliver: SliverGrid(
@@ -877,6 +878,9 @@ class _MediaPosterGrid extends StatelessWidget {
           (context, index) {
             final item = items[index];
             final pluginId = item.pluginId ?? '';
+            final headers = pluginId.isEmpty
+                ? null
+                : runner.imageHeadersFor(pluginId, item.cover);
             return InkWell(
               borderRadius: BorderRadius.circular(12),
               onTap: pluginId.isEmpty
@@ -894,6 +898,7 @@ class _MediaPosterGrid extends StatelessWidget {
                       child: item.cover.isNotEmpty
                           ? CachedNetworkImage(
                               imageUrl: item.cover,
+                              httpHeaders: headers,
                               fit: BoxFit.cover,
                               errorWidget: (_, __, ___) => const Center(
                                 child: Icon(LucideIcons.imageOff,

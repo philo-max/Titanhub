@@ -10,6 +10,7 @@ import '../widgets/episode_selector.dart';
 import '../../../core/identity/media_identity.dart';
 import '../../../core/playback/chapter_groups.dart';
 import '../../../core/router/app_router.dart';
+import '../../../core/sandbox/local_plugin_runner.dart';
 import '../../../core/sources/local_sources.dart';
 import '../../../core/sources/media_source.dart';
 import '../../tracking/sync_provider.dart';
@@ -119,6 +120,7 @@ class DetailScreen extends ConsumerWidget {
                   children: [
                     CachedNetworkImage(
                       imageUrl: detail.cover,
+                      httpHeaders: ref.read(localPluginRunnerProvider).imageHeadersFor(pluginId, detail.cover),
                       fit: BoxFit.cover,
                       errorWidget: (_, __, ___) => const SizedBox(),
                     ),
@@ -153,6 +155,7 @@ class DetailScreen extends ConsumerWidget {
                           borderRadius: BorderRadius.circular(15),
                           child: CachedNetworkImage(
                             imageUrl: detail.cover,
+                            httpHeaders: ref.read(localPluginRunnerProvider).imageHeadersFor(pluginId, detail.cover),
                             fit: BoxFit.cover,
                             placeholder: (_, __) => Container(color: Colors.grey[900]),
                             errorWidget: (_, __, ___) => Container(

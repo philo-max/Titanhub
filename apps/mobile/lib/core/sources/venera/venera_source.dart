@@ -222,19 +222,45 @@ class VeneraSource {
 
   static List<dynamic> _list(Object? value) => value is List ? value : const [];
 
+  void _recordCoverHeaders(Object? item) {
+    if (item is! Map) return;
+    final cover = '${item['cover'] ?? ''}'.trim();
+    final rawHeaders = item['coverHeaders'];
+    if (cover.isEmpty || rawHeaders is! Map || rawHeaders.isEmpty) return;
+    final headers = <String, String>{
+      for (final e in rawHeaders.entries)
+        if ('${e.key}'.toLowerCase() != 'accept-encoding') '${e.key}': '${e.value}',
+    };
+    if (headers.isEmpty) return;
+    if (_imageHeaders.length >= veneraMaxImageHeaderEntries) {
+      _imageHeaders.remove(_imageHeaders.keys.first);
+    }
+    _imageHeaders[cover] = headers;
+  }
+
   Future<dynamic> call(String method, List<dynamic> args) async {
     switch (method) {
       case 'search':
         final keyword = args.isEmpty ? '' : '${args.first}'.trim();
         if (keyword.isEmpty) return const [];
         final result = await _call('searchPage', [keyword, 1]) as Map;
-        return _list(result['comics']);
+        final list = _list(result['comics']);
+        for (final item in list) {
+          _recordCoverHeaders(item);
+        }
+        return list;
       case 'explore':
         final tab = args.isNotEmpty && args.first != null ? ['${args.first}'] : const <Object?>[];
         final result = await _call('explore', tab) as Map;
-        return _list(result['comics']);
+        final list = _list(result['comics']);
+        for (final item in list) {
+          _recordCoverHeaders(item);
+        }
+        return list;
       case 'getDetail':
-        return (await _info('${args.first}'))['detail'];
+        final detail = (await _info('${args.first}'))['detail'];
+        _recordCoverHeaders(detail);
+        return detail;
       case 'getChapters':
         return _list((await _info('${args.first}'))['chapters']);
       case 'getImages':
@@ -255,7 +281,8 @@ class VeneraSource {
       final url = '${item['url']}';
       final headers = <String, String>{
         'User-Agent': veneraUserAgent,
-        for (final e in (item['headers'] as Map? ?? const {}).entries) '${e.key}': '${e.value}',
+        for (final e in (item['headers'] as Map? ?? const {}).entries)
+          if ('${e.key}'.toLowerCase() != 'accept-encoding') '${e.key}': '${e.value}',
       };
       final uri = Uri.tryParse(url);
       if (uri != null && uri.hasScheme && !headers.keys.any((k) => k.toLowerCase() == 'cookie')) {

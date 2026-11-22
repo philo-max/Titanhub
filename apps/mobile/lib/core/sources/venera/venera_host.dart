@@ -301,7 +301,9 @@ class VeneraHost {
       final uri = checkUrl('${p['url']}');
       final headers = <String, dynamic>{
         for (final e in Map<String, dynamic>.from(p['headers'] as Map? ?? const {}).entries)
-          if (e.key.toLowerCase() != 'http_client') e.key: '${e.value}',
+          if (e.key.toLowerCase() != 'http_client' &&
+              e.key.toLowerCase() != 'accept-encoding')
+            e.key: '${e.value}',
       };
       final lower = {for (final k in headers.keys) k.toLowerCase(): k};
       if (!lower.containsKey('user-agent')) {

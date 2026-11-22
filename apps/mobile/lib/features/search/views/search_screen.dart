@@ -8,6 +8,7 @@ import '../../media/providers/media_providers.dart';
 import '../../tracking/sync_provider.dart';
 import '../../tracking/auth_dialog.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/sandbox/local_plugin_runner.dart';
 import '../../../core/sources/unified/unified_sources.dart';
 import '../../../core/sources/local_sources.dart';
 import '../../../core/sources/media_source.dart';
@@ -813,6 +814,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               ),
               child: CachedNetworkImage(
                 imageUrl: item.cover,
+                httpHeaders: (item.pluginId ?? '').isEmpty
+                    ? null
+                    : ref.read(localPluginRunnerProvider).imageHeadersFor(item.pluginId!, item.cover),
                 width: 96,
                 height: 132,
                 fit: BoxFit.cover,

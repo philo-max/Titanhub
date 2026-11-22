@@ -12,11 +12,28 @@ const String veneraShimBridge = r'''
     return Object.keys(value).map(function(k) { return [k, value[k]]; });
   }
   function text(value) { return value === undefined || value === null ? '' : String(value); }
+  function thumbHeaders(url) {
+    if (!url) return null;
+    try {
+      var s = g.__veneraInstance;
+      var hook = s && s.comic && typeof s.comic.onThumbnailLoad === 'function' ? s.comic.onThumbnailLoad.bind(s.comic) : null;
+      if (!hook) return null;
+      var cfg = hook(url);
+      if (cfg && typeof cfg === 'object' && !('then' in cfg) && cfg.headers && typeof cfg.headers === 'object') {
+        return cfg.headers;
+      }
+    } catch (_) {}
+    return null;
+  }
   function media(c) {
-    return {
-      id: text(c.id), title: c.title || '未命名', cover: c.cover || '',
+    var cover = c.cover || '';
+    var item = {
+      id: text(c.id), title: c.title || '未命名', cover: cover,
       description: c.description || c.subTitle || c.subtitle || ''
     };
+    var hdr = thumbHeaders(cover);
+    if (hdr) item.coverHeaders = hdr;
+    return item;
   }
   function comics(list) {
     if (!Array.isArray(list)) throw new Error('来源返回的漫画列表格式无效');
@@ -119,11 +136,15 @@ const String veneraShimBridge = r'''
     return genres;
   }
   function mapDetail(id, d) {
-    return {
-      id: id, title: d.title || id, cover: d.cover || '', description: d.description || '',
+    var cover = d.cover || '';
+    var out = {
+      id: id, title: d.title || id, cover: cover, description: d.description || '',
       genres: tagsToGenres(d.tags), status: d.updateTime || undefined,
       author: typeof d.uploader === 'string' ? d.uploader : undefined
     };
+    var hdr = thumbHeaders(cover);
+    if (hdr) out.coverHeaders = hdr;
+    return out;
   }
   function mapChapters(id, d) {
     var ch = d.chapters;
