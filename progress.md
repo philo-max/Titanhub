@@ -1,5 +1,27 @@
 # 进度跟踪日志
 
+## 2026-11-22 ~ 2026-11-23：JM/Venera 漫画网络与反混淆全链路修复（v1.1.2+27）与空间清理
+
+- **问题复现（模拟器 `Zhihui_API_34` / `emulator-5554`）**：同环境下 Venera 能打开 JM 而 Titanhub 打不开，进入章节后全部图片报「图片加载失败，点击重试」。实机 logcat 与抓包共定位 5 处根因：
+  1. `MainlandHttpOverrides` 默认无条件劫持所有域名到 `MainlandDohProxy`，覆盖掉 `HttpClient.findProxyFromEnvironment` 系统代理并绕过 VPN/TUN Fake-IP（`198.18.0.0/15`）分流；
+  2. `jm.js` 默认请求头带 `Accept-Encoding: gzip, deflate, br, zstd`，部分节点（如 `www.cdnaspa.cc`）返回 `Content-Encoding: zstd` 而 Dart `HttpClient` 仅自动解压 `gzip`；
+  3. `VeneraImageProxy` 拼接 `modifyImage` 脚本结尾缺少分号，触发 JS ASI 惨案，QuickJS 报错 `TypeError: not a function at <eval>:92`，导致全部反混淆图片返回 `502 Bad Gateway`；
+  4. `package:image` v4 的 `compositeImage` 未显式传入 `dstW`/`dstH`，默认按整图高度拉伸切片，造成画面重影错位；
+  5. `onThumbnailLoad` 封面请求头未接入，影响 JM、漫画柜、漫画人、GoDa、nhentai、ehentai、hitomi 等 16 个依赖 Referer 的 Venera 漫画源。
+- **修复与优化**：
+  - `mainland_channel.dart`：优先尊重系统 HTTP 代理与 VPN Fake-IP/私网直连，仅系统连接失败后回退大陆 DoH（`223.5.5.5` / `1.12.12.12`）。
+  - `venera_host.dart` / `venera_source.dart` / `venera_image_proxy.dart`：统一剔除 `accept-encoding` 透传，交由 Dart 自动协商 `gzip` 解压。
+  - `venera_image_proxy.dart`：补齐分隔分号与 JSON 封包协议、为 `fillImageRangeAt` 传入 `dstW: w, dstH: h`、将像素解码/拼图/编码迁移至后台 `Isolate.run`（主线程串行 QuickJS 仅记录切块指令）、增加同图请求去重与错误日志。
+  - `venera_shim_bridge.dart` / `venera_source.dart` / `main_shell_screen.dart` / `detail_screen.dart` / `search_screen.dart`：全量接入 `onThumbnailLoad` 并向发现页、详情页、搜索页透传封面 `httpHeaders`。
+  - `apps/desktop/package.json` 同步至 `1.1.2`，重编 `titanhub-desktop`（`tsc`）与 `titanhub-server`。
+- **双重验证**：
+  - 白盒：`flutter analyze --no-fatal-infos` 0 error/0 warning；`venera_image_proxy_test.dart` 3/3 通过（含新增 `fillImageRangeAt` 像素级防拉伸单元测试）。
+  - 黑盒：模拟器实机验收禁漫天堂发现页 → 详情页 → 第 5 话阅读器 1~4 页全部高清还原、切块严丝合缝、零 `VeneraImageProxy` 报错。
+- **构建与发布**：
+  - 构建通用 Release APK `apps/mobile/release/Titanhub-1.1.2-universal.apk`（`1.1.2+27`，`118.1MB`），用户真机已安装完成。
+  - 推送代码 `2f147fe`、更新日志 `CHANGELOG.md` + `README.md`（`ad45eaa`）及带说明的标签 `v1.1.2` 至 `origin/master`。
+- **工作空间清理**：关闭后台模拟器，清理 12 个历史旧版 APK、`apps/desktop` 过期打包目录（`build-out-1.1.0`、`dist-package`、`dist-release`）、NSIS 临时目录与调试截图残留，保留最新正式包 `Titanhub-1.1.2-universal.apk`。
+
 ## 2026-11-01：电脑端漫画复现与修复
 
 - Preview6已真实GUI复验成功：电脑界面存第8页→设置页手动WebDAV同步→Android16/16KB正式release界面同步，MangaDex详情15%→继续阅读显示8/53且第8图顶部正好位于viewport（nov01-preview6-page8.png）；用户手势滚动后推进到9/53未被拉回→AndroidGUI同步→电脑设置页GUI同步→继续阅读确实定位第9图（nov01-synced-page9.png）。不再仅是移动内存数据库互通。临时Android DAV配置已经GUI清除，测试输入APK已卸载，自建模拟器已按AVD身份核对后关闭，临时DAV fixture进程已按确切脚本身份停止。
