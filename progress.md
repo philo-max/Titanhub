@@ -24,7 +24,8 @@
 - **2026-11-23 CI 与桌面端 1.1.2 修复**：
   - 排查 GitHub Actions `Build & Release v1.1.2`（Run `#45049630100`）失败原因：`build-windows-electron` 中 `pnpm/action-setup@v4` 与根 `packageManager` 冲突、`build-android` 旧脚本对 Kotlin DSL `android/` 强行 `flutter create` 并追加 Groovy 补丁导致 APK 构建失败；已修复 `.github/workflows/release.yml`。
   - 修复 `apps/desktop/src/main/packaged-smoke.test.ts` 对已解析对象重复 `JSON.parse(await res.json())` 及 Windows teardown 锁问题。
-  - 本地完成 `pnpm package:desktop`（产出 `apps/desktop/build-out/Titanhub-Setup-1.1.2-x64.exe`）及桌面全量测试 **11/11 文件、61/61 全部通过**，重推 `v1.1.2` 标签触发 GitHub Release 自动发布。
+  - **修复桌面端用户反馈「无法访问、没法看、没法搜」核弹根因**：在 `server/src/plugins/fake-ip-network.ts` 中，`resolveFakeIpAddress` 此前仅硬编码 `1.1.1.1` / `1.0.0.1` 做 2.5s DoH 校验，大陆代理 TUN（Fake-IP `198.18.x.x`）环境下 100% 超时导致 `isSafeUrl` 误杀全部外网源（Bangumi/MangaDex/聚合搜索全报 `SecurityError: blocked by sandbox policy`）；已将大陆秒通的阿里/腾讯 DoH（`223.5.5.5` / `1.12.12.12`）加入优先链，并在桌面本地模式（`TITANHUB_DESKTOP=1`）通过公网 IP 校验后放行系统 `fetch` 走 TUN 隧道。
+  - 验证：`titanhub-server` 全量 **29/29 文件、302/302 用例通过**；桌面生产后端黑盒实测 Bangumi（14 条）与 MangaDex（12 条）均恢复秒出；重新打包 `apps/desktop/build-out/Titanhub-Setup-1.1.2-x64.exe`。
 
 ## 2026-11-01：电脑端漫画复现与修复
 

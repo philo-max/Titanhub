@@ -563,9 +563,12 @@ export async function resolveValidatedAddress(hostname: string): Promise<string 
 
 export function fetchWithValidatedTransport(url: string, init: RequestInit): Promise<Response> {
   const validated = dnsCache.get(new URL(url).hostname.toLowerCase());
-  return validated?.pinned
-    ? fetchPinnedPublic(url, validated.ip, init)
-    : fetch(url, init);
+  // In local desktop mode, once the hostname is verified to resolve to public
+  // IP(s) via trusted DoH, let system fetch route through the user's TUN/VPN.
+  if (validated?.pinned && process.env.TITANHUB_DESKTOP !== '1') {
+    return fetchPinnedPublic(url, validated.ip, init);
+  }
+  return fetch(url, init);
 }
 
 interface PooledContext {

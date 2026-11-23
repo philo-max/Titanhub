@@ -8,6 +8,8 @@ const MAX_DNS_BYTES = 16384;
 const MAX_RESPONSE_BYTES = 5 * 1024 * 1024;
 const DOH_DOMAIN_ENDPOINT = 'https://cloudflare-dns.com/dns-query';
 const DOH_IP_ENDPOINTS = [
+  'https://223.5.5.5/resolve',
+  'https://1.12.12.12/resolve',
   'https://1.1.1.1/dns-query',
   'https://1.0.0.1/dns-query',
 ] as const;
@@ -54,6 +56,7 @@ export function resolveFakeIpAddress(hostname: string): Promise<string> {
   const pending = pendingLookups.get(hostname);
   if (pending) return pending;
   const isMockedFetch = typeof (globalThis.fetch as { mock?: unknown })?.mock === 'object';
+  const maxRetries = isMockedFetch ? DNS_RETRIES : DOH_IP_ENDPOINTS.length - 1;
   const lookup = (async () => {
     for (let attempt = 0; ; attempt++) {
       const endpoint = isMockedFetch
@@ -62,7 +65,7 @@ export function resolveFakeIpAddress(hostname: string): Promise<string> {
       try {
         return await queryPublicDns(hostname, endpoint);
       } catch (error) {
-        if (attempt >= DNS_RETRIES || !(error instanceof TransientDnsError)) throw error;
+        if (attempt >= maxRetries || !(error instanceof TransientDnsError)) throw error;
       }
     }
   })().finally(() => pendingLookups.delete(hostname));
