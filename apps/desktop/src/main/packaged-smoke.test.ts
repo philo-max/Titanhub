@@ -498,7 +498,7 @@ const engineFixturePluginCode = `
 globalThis.plugin = {
   async explore(type) {
     const res = await fetch('http://127.0.0.1:${MOCK_SITE_PORT}/mock-site/engine/list.json?type=' + type);
-    const list = JSON.parse(await res.json());
+    const list = await res.json();
     return list.items.map(function (item) { return { id: item.id, title: item.title, cover: item.cover }; });
   },
   async search(query) {
@@ -583,7 +583,11 @@ describe('Server production bundle copied outside the repository executes real p
     await killTree(backendProc);
     await new Promise<void>((resolve) => (fixture ? fixture.close(() => resolve()) : resolve()));
     if (installRoot && path.dirname(installRoot) === installBase && path.basename(installRoot).startsWith('Titanhub 后端 引擎-')) {
-      fs.rmSync(installRoot, { recursive: true, force: true });
+      try {
+        fs.rmSync(installRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+      } catch {
+        // Ignore transient Windows file lock during teardown
+      }
     }
   });
 

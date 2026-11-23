@@ -21,6 +21,10 @@
   - 构建通用 Release APK `apps/mobile/release/Titanhub-1.1.2-universal.apk`（`1.1.2+27`，`118.1MB`），用户真机已安装完成。
   - 推送代码 `2f147fe`、更新日志 `CHANGELOG.md` + `README.md`（`ad45eaa`）及带说明的标签 `v1.1.2` 至 `origin/master`。
 - **工作空间清理**：关闭后台模拟器，清理 12 个历史旧版 APK、`apps/desktop` 过期打包目录（`build-out-1.1.0`、`dist-package`、`dist-release`）、NSIS 临时目录与调试截图残留，保留最新正式包 `Titanhub-1.1.2-universal.apk`。
+- **2026-11-23 CI 与桌面端 1.1.2 修复**：
+  - 排查 GitHub Actions `Build & Release v1.1.2`（Run `#45049630100`）失败原因：`build-windows-electron` 中 `pnpm/action-setup@v4` 与根 `packageManager` 冲突、`build-android` 旧脚本对 Kotlin DSL `android/` 强行 `flutter create` 并追加 Groovy 补丁导致 APK 构建失败；已修复 `.github/workflows/release.yml`。
+  - 修复 `apps/desktop/src/main/packaged-smoke.test.ts` 对已解析对象重复 `JSON.parse(await res.json())` 及 Windows teardown 锁问题。
+  - 本地完成 `pnpm package:desktop`（产出 `apps/desktop/build-out/Titanhub-Setup-1.1.2-x64.exe`）及桌面全量测试 **11/11 文件、61/61 全部通过**，重推 `v1.1.2` 标签触发 GitHub Release 自动发布。
 
 ## 2026-11-01：电脑端漫画复现与修复
 

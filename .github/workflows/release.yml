@@ -53,8 +53,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
-        with:
-          version: 9
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -88,43 +86,14 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Create Android platform & Get dependencies
+      - name: Prepare Android dependencies
         run: |
           cd apps/mobile
-          flutter create --platforms=android .
-          sed -i 's/android:label="titanhub"/android:label="Titanhub"/g' android/app/src/main/AndroidManifest.xml
-          
-          # Append JVM target compatibility overrides to force Java 11 for all plugin dependencies
-          cat << 'EOF' >> android/build.gradle
-          subprojects {
-              afterEvaluate { project ->
-                  if (project.hasProperty('android')) {
-                      project.android {
-                          compileOptions {
-                              sourceCompatibility = JavaVersion.VERSION_11
-                              targetCompatibility = JavaVersion.VERSION_11
-                          }
-                      }
-                  }
-                  project.tasks.matching { it.class.name.contains("KotlinCompile") }.configureEach {
-                      kotlinOptions {
-                          jvmTarget = "11"
-                      }
-                  }
-              }
-          }
-          EOF
-
-          # Gradle memory: 4GB heap + 1GB metaspace — CI runner has 7GB RAM
           echo "org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m -XX:+HeapDumpOnOutOfMemoryError" >> android/gradle.properties
           echo "kotlin.incremental=false" >> android/gradle.properties
           echo "org.gradle.daemon=false" >> android/gradle.properties
           echo "org.gradle.workers.max=2" >> android/gradle.properties
-          echo "kotlin.compiler.execution.strategy=in-process" >> android/gradle.properties
-
           flutter pub get
-          flutter pub run flutter_launcher_icons -f flutter_launcher_icons_android.yaml
-          flutter pub run build_runner build --delete-conflicting-outputs
 
       - name: Build APK
         run: |
